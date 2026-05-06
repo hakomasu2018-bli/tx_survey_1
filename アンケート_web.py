@@ -3,10 +3,11 @@ import pandas as pd
 import datetime
 import os
 import unicodedata # 半角変換用
+import gspread
+import json
 
 # --- 設定 ---
 FILE_MASTER = "options_master.xlsx"
-FILE_RESULTS = "survey_results.csv"
 IMAGE_EXAMPLE = "example.png" # 記入例の画像ファイル名
 
 st.set_page_config(page_title="TXアンケートシステム", layout="centered")
@@ -320,10 +321,33 @@ elif st.session_state.step == "final_submit":
     with col2:
         if st.button("アンケートを送信する", type="primary"):
             st.session_state.answers['timestamp'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            final_df = pd.DataFrame([st.session_state.answers])
-            header = not os.path.exists(FILE_RESULTS)
-            final_df.to_csv(FILE_RESULTS, mode='a', index=False, header=header, encoding='utf-8-sig')
-            next_step("thanks")
+            
+            try:
+                # 金庫から鍵を取り出してGoogleにログイン
+                credentials_dict = json.loads(st.secrets["gcp_service_account"])
+                gc = gspread.service_account_from_dict(credentials_dict)
+                
+                # 指定された新しいスプレッドシートを開く
+                SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1kkZiyhLeOJnM0ypLpzytZZiVYhJBcRsc7bVnCXdhICk/edit"
+                sh_doc = gc.open_by_url(SPREADSHEET_URL)
+                worksheet = sh_doc.sheet1
+                
+                # データをリスト形式に変換
+                headers = list(st.session_state.answers.keys())
+                values = list(st.session_state.answers.values())
+                
+                # シートが空なら1行目に項目名（ヘッダー）を書き込む
+                if not worksheet.get_all_values():
+                    worksheet.append_row(headers)
+                
+                # 回答データを一番下の行に追加する
+                worksheet.append_row(values)
+                
+                # 成功したらサンクスページへ
+                next_step("thanks")
+                
+            except Exception as e:
+                st.error(f"データ保存中にエラーが発生しました。設定を確認してください: {e}")
 
 # =========================================================
 # 6. 終了画面
