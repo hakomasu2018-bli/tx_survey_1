@@ -316,7 +316,7 @@ elif st.session_state.step == "survey_page":
                 st.rerun()
 
 # =========================================================
-# 5. 重要視する要因に関する調査（新規追加）
+# 5. 重要視する要因に関する調査（チェックボックス版）
 # =========================================================
 elif st.session_state.step == "factors_page":
     st.header("03　重要視する要因に関する調査")
@@ -327,27 +327,29 @@ elif st.session_state.step == "factors_page":
     
     st.markdown("---")
     
-    # 4つ選択
+    # 【1】4つ選択
     st.subheader("【1】以下の中から、特に重視するものを 4つ 選択してください。")
-    selected_4 = st.multiselect(
-        "ここをタップして4つ選択",
-        options=FACTORS_4[sh],
-        default=st.session_state.answers.get('factors_4_list', []),
-        max_selections=4, # 4つまでしか選べないように制限
-        key="multi_4"
-    )
+    selected_4 = []
+    # 前回の選択状態を取得（戻ってきたとき用）
+    prev_selected_4 = st.session_state.answers.get('factors_4_list', [])
     
+    for factor in FACTORS_4[sh]:
+        # チェックボックスを作成し、チェックされたらリストに追加
+        is_checked = st.checkbox(factor, value=(factor in prev_selected_4), key=f"chk4_{factor}")
+        if is_checked:
+            selected_4.append(factor)
+            
     st.write("") # 余白
     
-    # 3つ選択
+    # 【2】3つ選択
     st.subheader("【2】以下の中から、特に重視するものを 3つ 選択してください。")
-    selected_3 = st.multiselect(
-        "ここをタップして3つ選択",
-        options=FACTORS_3[sh],
-        default=st.session_state.answers.get('factors_3_list', []),
-        max_selections=3, # 3つまでしか選べないように制限
-        key="multi_3"
-    )
+    selected_3 = []
+    prev_selected_3 = st.session_state.answers.get('factors_3_list', [])
+    
+    for factor in FACTORS_3[sh]:
+        is_checked = st.checkbox(factor, value=(factor in prev_selected_3), key=f"chk3_{factor}")
+        if is_checked:
+            selected_3.append(factor)
 
     st.markdown("---")
     
@@ -360,11 +362,11 @@ elif st.session_state.step == "factors_page":
             
     with col2:
         if st.button("最終確認へ進む", type="primary"):
-            # バリデーション（指定の個数をきちんと選んでいるか）
+            # バリデーション（指定の個数をきちんと選んでいるかチェック）
             if len(selected_4) != 4:
-                st.error("【1】の設問は必ず「4つ」選択してください。")
+                st.error(f"【1】の設問は必ず「4つ」選択してください。（現在 {len(selected_4)}個 選択中）")
             elif len(selected_3) != 3:
-                st.error("【2】の設問は必ず「3つ」選択してください。")
+                st.error(f"【2】の設問は必ず「3つ」選択してください。（現在 {len(selected_3)}個 選択中）")
             else:
                 # データをカンマ区切りの文字列として保存
                 st.session_state.answers['factors_4_list'] = selected_4
