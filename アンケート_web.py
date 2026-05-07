@@ -10,6 +10,19 @@ import json
 FILE_MASTER = "options_master.xlsx"
 IMAGE_EXAMPLE = "example.png" # 記入例の画像ファイル名
 
+# --- 重要視する要因の選択肢マスタ（ステークホルダー別） ---
+FACTORS_4 = {
+    "patient": ["説明が分かりやすいこと", "予定・処置の見通しが立つこと", "医療者の接遇が丁寧であること", "希望・不安を伝えやすいこと", "必要時にすぐ対応してもらえること", "患者に合わせた対応を受けられること", "医療・ケアが安全に行われること", "身体的な負担が少ないこと", "病室・病棟環境が快適であること", "プライバシーに配慮されること", "周囲とのつながりを保てること"],
+    "nurse": ["患者と向き合う時間が確保されていること", "患者の状態・希望を把握できていること", "患者に合わせたケアが行えること", "患者への接遇が適切であること", "患者の尊厳・プライバシーに配慮できていること", "医療安全が確保されていること", "記録・情報共有が円滑であること", "多職種との連携が円滑であること", "業務量・時間的負担が過度でないこと", "物品・設備が利用しやすいこと", "病室・病棟環境を維持できること"],
+    "manager": ["説明が適切に行われること", "接遇・声かけが丁寧であること", "必要時の対応が確実であること", "医療安全を確保できること", "病室・病棟環境を維持できること", "情報共有・記録が正確であること", "多職種が連携しやすいこと", "手順・判断基準が明確であること", "医療従事者の負担が軽減されること", "物品・設備を管理しやすいこと", "費用対効果が高いこと"]
+}
+
+FACTORS_3 = {
+    "patient": ["安心できること", "理解・納得できること", "医療者を信頼できること", "不安が少ないこと", "尊厳が保たれること", "自分らしく過ごせること", "身体的に楽であること"],
+    "nurse": ["医療の質・安全を維持できること", "業務を効率的に進められること", "専門性を発揮できること", "心身の余裕を保てること", "チームで協力できること", "誠実なケアを提供できること", "患者との信頼関係を築けること"],
+    "manager": ["運営が安定していること", "医療の質・安全を維持できること", "患者との信頼関係を築けること", "働きやすい職場をつくれること", "資源を妥当に活用できること", "収益性・持続可能性を確保できること", "組織改善・成長につながること"]
+}
+
 st.set_page_config(page_title="TXアンケートシステム", layout="centered")
 
 # セッション状態の初期化
@@ -38,7 +51,8 @@ def display_progress():
     elif st.session_state.step == "survey_page":
         sh = st.session_state.answers.get('stakeholder', 'patient')
         tps = df_master[df_master['stakeholder_id'] == sh]['touchpoint_text'].unique()
-        progress = 0.20 + (st.session_state.current_tp_idx / len(tps)) * 0.75
+        progress = 0.20 + (st.session_state.current_tp_idx / len(tps)) * 0.70
+    elif st.session_state.step == "factors_page": progress = 0.95
     else: progress = 1.0
     st.progress(progress, text="アンケート進捗状況")
 
@@ -293,16 +307,74 @@ elif st.session_state.step == "survey_page":
                 next_step("instructions")
                 
     with col2:
-        button_label = "次のテーマへ進む" if st.session_state.current_tp_idx < len(tps) - 1 else "最終確認へ進む"
+        button_label = "次のテーマへ進む" if st.session_state.current_tp_idx < len(tps) - 1 else "重要視する要因の調査へ進む"
         if st.button(button_label, type="primary"):
             st.session_state.current_tp_idx += 1
             if st.session_state.current_tp_idx >= len(tps):
-                next_step("final_submit")
+                next_step("factors_page")
             else:
                 st.rerun()
 
 # =========================================================
-# 5. 最終送信ページ
+# 5. 重要視する要因に関する調査（新規追加）
+# =========================================================
+elif st.session_state.step == "factors_page":
+    st.header("03　重要視する要因に関する調査")
+    sh = st.session_state.answers['stakeholder']
+    
+    label_context = {"patient": "入院生活", "nurse": "業務", "manager": "病院運営"}[sh]
+    st.write(f"{label_context}において特に重視する要因をお答えください。")
+    
+    st.markdown("---")
+    
+    # 4つ選択
+    st.subheader("【1】以下の中から、特に重視するものを 4つ 選択してください。")
+    selected_4 = st.multiselect(
+        "ここをタップして4つ選択",
+        options=FACTORS_4[sh],
+        default=st.session_state.answers.get('factors_4_list', []),
+        max_selections=4, # 4つまでしか選べないように制限
+        key="multi_4"
+    )
+    
+    st.write("") # 余白
+    
+    # 3つ選択
+    st.subheader("【2】以下の中から、特に重視するものを 3つ 選択してください。")
+    selected_3 = st.multiselect(
+        "ここをタップして3つ選択",
+        options=FACTORS_3[sh],
+        default=st.session_state.answers.get('factors_3_list', []),
+        max_selections=3, # 3つまでしか選べないように制限
+        key="multi_3"
+    )
+
+    st.markdown("---")
+    
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("アンケート（前ページ）へ戻る", type="secondary"):
+            tps = df_master[df_master['stakeholder_id'] == sh]['touchpoint_text'].unique()
+            st.session_state.current_tp_idx = len(tps) - 1
+            next_step("survey_page")
+            
+    with col2:
+        if st.button("最終確認へ進む", type="primary"):
+            # バリデーション（指定の個数をきちんと選んでいるか）
+            if len(selected_4) != 4:
+                st.error("【1】の設問は必ず「4つ」選択してください。")
+            elif len(selected_3) != 3:
+                st.error("【2】の設問は必ず「3つ」選択してください。")
+            else:
+                # データをカンマ区切りの文字列として保存
+                st.session_state.answers['factors_4_list'] = selected_4
+                st.session_state.answers['factors_3_list'] = selected_3
+                st.session_state.answers['factors_4_text'] = ", ".join(selected_4)
+                st.session_state.answers['factors_3_text'] = ", ".join(selected_3)
+                next_step("final_submit")
+
+# =========================================================
+# 6. 最終送信ページ
 # =========================================================
 elif st.session_state.step == "final_submit":
     st.header("アンケートの完了")
@@ -312,15 +384,17 @@ elif st.session_state.step == "final_submit":
     
     col1, col2 = st.columns([1, 1])
     with col1:
-        if st.button("アンケートへ戻る", type="secondary"):
-            sh = st.session_state.answers['stakeholder']
-            tps = df_master[df_master['stakeholder_id'] == sh]['touchpoint_text'].unique()
-            st.session_state.current_tp_idx = len(tps) - 1
-            next_step("survey_page")
+        if st.button("要因の調査へ戻る", type="secondary"):
+            next_step("factors_page")
             
     with col2:
         if st.button("アンケートを送信する", type="primary"):
             st.session_state.answers['timestamp'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # 不要なリスト型データをスプレッドシート送信前に除外する処理
+            answers_to_save = st.session_state.answers.copy()
+            answers_to_save.pop('factors_4_list', None)
+            answers_to_save.pop('factors_3_list', None)
             
             try:
                 # 金庫から鍵を取り出してGoogleにログイン
@@ -333,8 +407,8 @@ elif st.session_state.step == "final_submit":
                 worksheet = sh_doc.sheet1
                 
                 # データをリスト形式に変換
-                headers = list(st.session_state.answers.keys())
-                values = list(st.session_state.answers.values())
+                headers = list(answers_to_save.keys())
+                values = list(answers_to_save.values())
                 
                 # シートが空なら1行目に項目名（ヘッダー）を書き込む
                 if not worksheet.get_all_values():
@@ -350,7 +424,7 @@ elif st.session_state.step == "final_submit":
                 st.error(f"データ保存中にエラーが発生しました。設定を確認してください: {e}")
 
 # =========================================================
-# 6. 終了画面
+# 7. 終了画面
 # =========================================================
 elif st.session_state.step == "thanks":
     st.success("多くの質問へのご回答そしてご協力、誠にありがとうございました。")
