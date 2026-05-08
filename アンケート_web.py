@@ -434,4 +434,4 @@ elif st.session_state.step == "thanks":
     st.write("データが正常に記録されました。このウィンドウを閉じて終了してください。")
     st.balloons()
 elif st.session_state.step == "end_denied":
-    st.warning("調査への同意が得られなかったため、アンケートを終了します。ご協力ありがとうございました。")
+    st.warning("アンケートを終了します。ご協力ありがとうございました。")
