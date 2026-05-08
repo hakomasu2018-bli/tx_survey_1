@@ -221,20 +221,19 @@ elif st.session_state.step == "instructions":
     st.header(title_text)
     st.write("以下では、様々な場面について、あなたにとっての理想をお答えいただきます。設問は35題あり、所要時間は20分～30分程度です。")
     
-    # 記入方法の説明文をコンスタントサム用に変更
     st.markdown("""
     <div style='background-color: #f0f2f6; padding: 20px; border-radius: 5px; margin-bottom: 20px;'>
-        <p>❖ 各設問において、<strong>選択肢の重要度の合計が「1.0」になるように</strong>スライダーを動かして配分してください。（※全体を 1.0 とした相対評価です）</p>
+        <p>❖ 各設問において、<strong>選択肢の重要度の合計が「1.00」になるように</strong>スライダーを動かして配分してください。（※全体を 1.00 とした相対評価です）</p>
         <p>❖ 最も重視する項目に高い数値を、重視しない項目には 0 に近い数値を割り当てます。バーの長さを目安に直感的に配分してください。</p>
-        <p>❖ 画面上部に合計値のバーが表示されます。<strong>合計がぴったり 1.0（緑色）にならないと、次の画面に進むことができません。</strong></p>
-        <p>❖ その他、加えたい内容がある場合は、任意でご記入ください。</p>
+        <p>❖ 画面上部に合計値のバーが表示されます。<strong>合計がぴったり 1.00（緑色）にならないと、次の画面に進むことができません。</strong></p>
+        <p>❖ その他、加えたい内容がある場合は、任意でご記入ください。（※「その他」に入力した場合、その項目も合計 1.00 の配分に含めてください）</p>
         <p>❖ 実際の現場では患者の状態や病棟の状況によって対応が異なると思いますが、本調査では細かな条件を厳密に想定しすぎず、<strong>直感的にお答えください。</strong></p>
         <p>❖ 正解はありませんので、一般的に望ましいと思われる回答ではなく、ご自身の率直なお考えをご回答ください。ご回答の内容が他の職員の方などに見られることはありません。</p>
     </div>
     """, unsafe_allow_html=True)
     
     st.markdown("### 【配分のイメージ】")
-    st.write("例：4つの選択肢がある場合、「0.40」「0.30」「0.20」「0.10」のように、足して 1.0 になるように調整します。")
+    st.write("例：4つの選択肢がある場合、「0.40」「0.30」「0.20」「0.10」のように、足して 1.00 になるように調整します。")
         
     st.markdown("---")
     
@@ -274,8 +273,8 @@ elif st.session_state.step == "survey_page":
     # セッションステートから最新のスライダー値を取得するヘルパー関数
     def get_slider_val(k):
         if k in st.session_state:
-            return st.session_state[k]
-        return st.session_state.answers.get(k, 0.0)
+            return float(st.session_state[k])
+        return float(st.session_state.answers.get(k, 0.00))
 
     for q_id in q_df['question_text'].unique():
         options = q_df[q_df['question_text'] == q_id]
@@ -321,15 +320,15 @@ elif st.session_state.step == "survey_page":
             <div style='text-align: right; font-weight: bold; color: {bar_color}; margin-bottom: 15px;'>{status_text}</div>
         """, unsafe_allow_html=True)
         
-        # 4. スライダーの描画
+        # 4. スライダーの描画（0.01刻みに変更）
         for _, row in options.iterrows():
             key = f"val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}_opt{row['option_id']}_item{row['item_id']}"
             st.session_state.answers[key] = st.slider(
                 row['option_text'], 
-                min_value=0.0, 
-                max_value=1.0, 
-                value=st.session_state.answers.get(key, 0.0), 
-                step=0.05, 
+                min_value=0.00, 
+                max_value=1.00, 
+                value=float(st.session_state.answers.get(key, 0.00)), 
+                step=0.01, 
                 format="%.2f", 
                 key=key
             )
@@ -337,10 +336,10 @@ elif st.session_state.step == "survey_page":
         if other_text:
             st.session_state.answers[other_key_val] = st.slider(
                 f"「{other_text}」の評価", 
-                min_value=0.0, 
-                max_value=1.0, 
-                value=st.session_state.answers.get(other_key_val, 0.0), 
-                step=0.05, 
+                min_value=0.00, 
+                max_value=1.00, 
+                value=float(st.session_state.answers.get(other_key_val, 0.00)), 
+                step=0.01, 
                 format="%.2f", 
                 key=other_key_val
             )
