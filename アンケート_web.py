@@ -287,12 +287,12 @@ elif st.session_state.step == "survey_page":
         other_key_text = f"other_text_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
         other_key_val = f"other_val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
         
-        # その他の入力があるか確認し、あればキーを追加
-        other_text = st.text_input("その他（上記以外）：", key=other_key_text)
-        if other_text:
+        # ※描画前に、セッションステートから「その他」の入力があるか確認する
+        current_other_text = st.session_state.get(other_key_text, "")
+        if current_other_text:
             slider_keys.append(other_key_val)
             
-        # 2. 現在の合計値を計算（小数の計算誤差を防ぐためround関数を使用）
+        # 2. 現在の合計値を計算
         current_sum = round(sum(get_slider_val(k) for k in slider_keys), 2)
         
         # 3. 上部バーの描画
@@ -320,7 +320,7 @@ elif st.session_state.step == "survey_page":
             <div style='text-align: right; font-weight: bold; color: {bar_color}; margin-bottom: 15px;'>{status_text}</div>
         """, unsafe_allow_html=True)
         
-        # 4. スライダーの描画（0.01刻みに変更）
+        # 4. 既存の選択肢のスライダーを描画
         for _, row in options.iterrows():
             key = f"val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}_opt{row['option_id']}_item{row['item_id']}"
             st.session_state.answers[key] = st.slider(
@@ -333,6 +333,8 @@ elif st.session_state.step == "survey_page":
                 key=key
             )
             
+        # 5. 一番下に「その他」の入力欄とスライダーを描画
+        other_text = st.text_input("その他（上記以外）：", key=other_key_text)
         if other_text:
             st.session_state.answers[other_key_val] = st.slider(
                 f"「{other_text}」の評価", 
@@ -344,6 +346,11 @@ elif st.session_state.step == "survey_page":
                 key=other_key_val
             )
             st.session_state.answers[f"other_label_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"] = other_text
+        else:
+            # 入力を消した場合は値をリセット
+            if other_key_val in st.session_state.answers:
+                st.session_state.answers[other_key_val] = 0.00
+                st.session_state[other_key_val] = 0.00
 
         st.markdown("---")
         
