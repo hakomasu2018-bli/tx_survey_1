@@ -269,7 +269,7 @@ elif st.session_state.step == "instructions":
             next_step("survey_page")
 
 # =========================================================
-# 4. アンケート本編（コンスタントサム・ボタン付）
+# 4. アンケート本編（コンスタントサム・ボタン付・コールバック修正版）
 # =========================================================
 elif st.session_state.step == "survey_page":
     st.markdown("""
@@ -289,10 +289,16 @@ elif st.session_state.step == "survey_page":
     
     all_valid = True
     
-    # 値の取得・増減用関数
+    # 値の取得用関数
     def get_val(k):
-        if k not in st.session_state: st.session_state[k] = 0.00
+        if k not in st.session_state: 
+            st.session_state[k] = 0.00
         return float(st.session_state[k])
+
+    # ★ ここが修正の要！ボタンを押した時だけ動くコールバック関数
+    def adjust_val(k, delta):
+        val = float(st.session_state.get(k, 0.00))
+        st.session_state[k] = round(max(0.00, min(1.00, val + delta)), 2)
 
     for q_id in q_df['question_text'].unique():
         options = q_df[q_df['question_text'] == q_id]
@@ -301,14 +307,16 @@ elif st.session_state.step == "survey_page":
         slider_keys = [f"val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}_opt{row['option_id']}_item{row['item_id']}" for _, row in options.iterrows()]
         other_key_text = f"other_text_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
         other_key_val = f"other_val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
-        if st.session_state.get(other_key_text): slider_keys.append(other_key_val)
+        if st.session_state.get(other_key_text): 
+            slider_keys.append(other_key_val)
         
         current_sum = round(sum(get_val(k) for k in slider_keys), 2)
         
         # ゲージ表示
         bar_color = "#4CAF50" if current_sum == 1.00 else ("#F44336" if current_sum > 1.00 else "#FFC107")
         status_text = f"✅ 合計: 1.00" if current_sum == 1.00 else (f"⚠️ 合計: {current_sum:.2f} (超過)" if current_sum > 1.00 else f"⏳ 合計: {current_sum:.2f} (不足)")
-        if current_sum != 1.00: all_valid = False
+        if current_sum != 1.00: 
+            all_valid = False
         
         st.markdown(f"""
             <div style='background-color:#e0e0e0; border-radius:5px; width:100%; height:15px;'>
@@ -317,28 +325,34 @@ elif st.session_state.step == "survey_page":
             <div style='text-align:right; font-weight:bold; color:{bar_color}; font-size:14px; margin-bottom:10px;'>{status_text}</div>
         """, unsafe_allow_html=True)
         
-        # 各スライダー（ボタン付き）の描画
+        # 各スライダー（コールバックボタン付き）の描画
         def draw_adjustable_slider(label, key):
+            if key not in st.session_state:
+                st.session_state[key] = 0.00
+                
             st.write(f"**{label}**")
             c_m, c_s, c_p = st.columns([1, 8, 1])
             with c_m:
-                if st.button("－", key=f"min_btn_{key}"):
-                    st.session_state[key] = round(max(0.00, get_val(key) - 0.01), 2)
-                    st.rerun()
+                st.button("－", key=f"min_btn_{key}", on_click=adjust_val, args=(key, -0.01))
             with c_s:
-                st.session_state[key] = st.slider(label, 0.00, 1.00, get_val(key), 0.01, format="%.2f", key=key, label_visibility="collapsed")
+                st.slider(label, min_value=0.00, max_value=1.00, step=0.01, format="%.2f", key=key, label_visibility="collapsed")
             with c_p:
-                if st.button("＋", key=f"pls_btn_{key}"):
-                    st.session_state[key] = round(min(1.00, get_val(key) + 0.01), 2)
-                    st.rerun()
+                st.button("＋", key=f"pls_btn_{key}", on_click=adjust_val, args=(key, 0.01))
 
+        # 既存の選択肢のスライダー描画
         for _, row in options.iterrows():
-            draw_adjustable_slider(row['option_text'], slider_keys.pop(0))
+            k = f"val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}_opt{row['option_id']}_item{row['item_id']}"
+            draw_adjustable_slider(row['option_text'], k)
             
+        # その他のスライダー描画
         other_text = st.text_input("その他（上記以外）：", key=other_key_text)
         if other_text:
             draw_adjustable_slider(f"「{other_text}」の評価", other_key_val)
             st.session_state.answers[f"other_label_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"] = other_text
+        else:
+            if other_key_val in st.session_state:
+                st.session_state[other_key_val] = 0.00
+                
         st.markdown("---")
         
     col1, col2 = st.columns([1, 1])
@@ -352,9 +366,11 @@ elif st.session_state.step == "survey_page":
     with col2:
         button_label = "最終確認へ進む" if st.session_state.current_tp_idx >= len(tps) - 1 else "次のテーマへ進む"
         if st.button(button_label, type="primary", disabled=not all_valid):
-            # スライダーの値をanswersに反映
+            # スライダーの値を最終的にanswersに反映
             for k in st.session_state:
-                if k.startswith("val_") or k.startswith("other_val_"): st.session_state.answers[k] = st.session_state[k]
+                if k.startswith("val_") or k.startswith("other_val_"): 
+                    st.session_state.answers[k] = st.session_state[k]
+                    
             st.session_state.current_tp_idx += 1
             if st.session_state.current_tp_idx >= len(tps):
                 next_step("final_submit")
