@@ -10,19 +10,6 @@ import json
 FILE_MASTER = "options_master.xlsx"
 IMAGE_EXAMPLE = "example.png" # 記入例の画像ファイル名
 
-# --- 重要視する要因の選択肢マスタ（ステークホルダー別） ---
-FACTORS_4 = {
-    "patient": ["説明が分かりやすいこと", "予定・処置の見通しが立つこと", "医療者の接遇が丁寧であること", "希望・不安を伝えやすいこと", "必要時にすぐ対応してもらえること", "患者に合わせた対応を受けられること", "医療・ケアが安全に行われること", "身体的な負担が少ないこと", "病室・病棟環境が快適であること", "プライバシーに配慮されること", "周囲とのつながりを保てること"],
-    "nurse": ["患者と向き合う時間が確保されていること", "患者の状態・希望を把握できていること", "患者に合わせたケアが行えること", "患者への接遇が適切であること", "患者の尊厳・プライバシーに配慮できていること", "医療安全が確保されていること", "記録・情報共有が円滑であること", "多職種との連携が円滑であること", "業務量・時間的負担が過度でないこと", "物品・設備が利用しやすいこと", "病室・病棟環境を維持できること"],
-    "manager": ["説明が適切に行われること", "接遇・声かけが丁寧であること", "必要時の対応が確実であること", "医療安全を確保できること", "病室・病棟環境を維持できること", "情報共有・記録が正確であること", "多職種が連携しやすいこと", "手順・判断基準が明確であること", "医療従事者の負担が軽減されること", "物品・設備を管理しやすいこと", "費用対効果が高いこと"]
-}
-
-FACTORS_3 = {
-    "patient": ["安心できること", "理解・納得できること", "医療者を信頼できること", "不安が少ないこと", "尊厳が保たれること", "自分らしく過ごせること", "身体的に楽であること"],
-    "nurse": ["医療の質・安全を維持できること", "業務を効率的に進められること", "専門性を発揮できること", "心身の余裕を保てること", "チームで協力できること", "誠実なケアを提供できること", "患者との信頼関係を築けること"],
-    "manager": ["運営が安定していること", "医療の質・安全を維持できること", "患者との信頼関係を築けること", "働きやすい職場をつくれること", "資源を妥当に活用できること", "収益性・持続可能性を確保できること", "組織改善・成長につながること"]
-}
-
 st.set_page_config(page_title="TXアンケートシステム", layout="centered")
 
 # セッション状態の初期化
@@ -51,8 +38,7 @@ def display_progress():
     elif st.session_state.step == "survey_page":
         sh = st.session_state.answers.get('stakeholder', 'patient')
         tps = df_master[df_master['stakeholder_id'] == sh]['touchpoint_text'].unique()
-        progress = 0.20 + (st.session_state.current_tp_idx / len(tps)) * 0.70
-    elif st.session_state.step == "factors_page": progress = 0.95
+        progress = 0.20 + (st.session_state.current_tp_idx / len(tps)) * 0.80
     else: progress = 1.0
     st.progress(progress, text="アンケート進捗状況")
 
@@ -113,7 +99,6 @@ elif st.session_state.step == "profile":
     st.header("基本情報の入力")
     sh = st.session_state.answers['stakeholder']
 
-    # フォームを解除し、入力内容に応じて即座に表示が切り替わるように変更
     st.radio("性別：", ["男性", "女性", "その他"], index=None, key="prof_gender", horizontal=True)
     st.text_input("年齢（代）：（半角数字 例：20、30など）", key="prof_age")
     
@@ -128,12 +113,10 @@ elif st.session_state.step == "profile":
         st.text_input("診療科：", key="prof_dept")
         
         st.radio("勤務体制：", ["日勤", "夜勤", "その他"], index=None, key="prof_shift", horizontal=True)
-        # 「その他」が選ばれた時だけ入力欄を表示
         if st.session_state.get("prof_shift") == "その他":
             st.text_input("勤務体制（その他の場合）：", key="prof_shift_other")
             
         st.radio("役職：", ["一般看護師", "リーダー・主任", "看護師長", "その他"], index=None, key="prof_role", horizontal=True)
-        # 「その他」が選ばれた時だけ入力欄を表示
         if st.session_state.get("prof_role") == "その他":
             st.text_input("役職（その他の場合）：", key="prof_role_other")
 
@@ -143,7 +126,6 @@ elif st.session_state.step == "profile":
         st.text_input("役職：", key="prof_role")
         
         st.radio("運営施設の種別：", ["一般病院", "特定機能病院", "地域医療支援病院", "精神病院", "その他"], index=None, key="prof_fac", horizontal=True)
-        # 「その他」が選ばれた時だけ入力欄を表示
         if st.session_state.get("prof_fac") == "その他":
             st.text_input("運営施設の種別（その他の場合）：", key="prof_fac_other")
             
@@ -393,7 +375,7 @@ elif st.session_state.step == "survey_page":
             else:
                 next_step("instructions")
     with col2:
-        button_label = "次のテーマへ進む" if st.session_state.current_tp_idx < len(tps) - 1 else "重要視する要因の調査へ進む"
+        button_label = "最終確認へ進む" if st.session_state.current_tp_idx >= len(tps) - 1 else "次のテーマへ進む"
         
         if not all_valid:
             st.warning("⚠️ すべての設問の合計を 1.00 にしてください")
@@ -401,61 +383,12 @@ elif st.session_state.step == "survey_page":
         if st.button(button_label, type="primary", disabled=not all_valid):
             st.session_state.current_tp_idx += 1
             if st.session_state.current_tp_idx >= len(tps):
-                next_step("factors_page")
+                next_step("final_submit")
             else:
                 st.rerun()
 
 # =========================================================
-# 5. 重要視する要因に関する調査
-# =========================================================
-elif st.session_state.step == "factors_page":
-    st.header("03　重要視する要因に関する調査")
-    sh = st.session_state.answers['stakeholder']
-    label_context = {"patient": "入院生活", "nurse": "業務", "manager": "病院運営"}[sh]
-    st.write(f"{label_context}において特に重視する要因をお答えください。")
-    st.markdown("---")
-    
-    st.subheader("【1】以下の中から、特に重視するものを 4つ 選択してください。")
-    selected_4 = []
-    prev_selected_4 = st.session_state.answers.get('factors_4_list', [])
-    for factor in FACTORS_4[sh]:
-        is_checked = st.checkbox(factor, value=(factor in prev_selected_4), key=f"chk4_{factor}")
-        if is_checked:
-            selected_4.append(factor)
-            
-    st.write("")
-    
-    st.subheader("【2】以下の中から、特に重視するものを 3つ 選択してください。")
-    selected_3 = []
-    prev_selected_3 = st.session_state.answers.get('factors_3_list', [])
-    for factor in FACTORS_3[sh]:
-        is_checked = st.checkbox(factor, value=(factor in prev_selected_3), key=f"chk3_{factor}")
-        if is_checked:
-            selected_3.append(factor)
-
-    st.markdown("---")
-    
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        if st.button("アンケート（前ページ）へ戻る", type="secondary"):
-            tps = df_master[df_master['stakeholder_id'] == sh]['touchpoint_text'].unique()
-            st.session_state.current_tp_idx = len(tps) - 1
-            next_step("survey_page")
-    with col2:
-        if st.button("最終確認へ進む", type="primary"):
-            if len(selected_4) != 4:
-                st.error(f"【1】の設問は必ず「4つ」選択してください。（現在 {len(selected_4)}個 選択中）")
-            elif len(selected_3) != 3:
-                st.error(f"【2】の設問は必ず「3つ」選択してください。（現在 {len(selected_3)}個 選択中）")
-            else:
-                st.session_state.answers['factors_4_list'] = selected_4
-                st.session_state.answers['factors_3_list'] = selected_3
-                st.session_state.answers['factors_4_text'] = ", ".join(selected_4)
-                st.session_state.answers['factors_3_text'] = ", ".join(selected_3)
-                next_step("final_submit")
-
-# =========================================================
-# 6. 最終送信ページ（シート分割・列固定処理）
+# 5. 最終送信ページ（シート分割・わかりやすいヘッダー・列固定）
 # =========================================================
 elif st.session_state.step == "final_submit":
     st.header("アンケートの完了")
@@ -464,8 +397,12 @@ elif st.session_state.step == "final_submit":
     
     col1, col2 = st.columns([1, 1])
     with col1:
-        if st.button("要因の調査へ戻る", type="secondary"):
-            next_step("factors_page")
+        if st.button("アンケートへ戻る", type="secondary"):
+            sh = st.session_state.answers['stakeholder']
+            tps = df_master[df_master['stakeholder_id'] == sh]['touchpoint_text'].unique()
+            st.session_state.current_tp_idx = len(tps) - 1
+            next_step("survey_page")
+            
     with col2:
         if st.button("アンケートを送信する", type="primary"):
             sh = st.session_state.answers['stakeholder']
@@ -484,37 +421,47 @@ elif st.session_state.step == "final_submit":
                 target_sheet_name = sheet_name_map.get(sh, "Sheet1")
                 worksheet = sh_doc.worksheet(target_sheet_name)
                 
-                # 3. 列（ヘッダー）の固定順序をあらかじめ計算する関数
-                def get_fixed_headers(sh_val, df):
-                    h = ['timestamp', 'consent', 'stakeholder', 'gender', 'age']
+                # 3. 内部用キーと、スプレッドシート用の「わかりやすい日本語ヘッダー」を作成する関数
+                def get_fixed_headers_and_labels(sh_val, df):
+                    keys = ['timestamp', 'consent', 'stakeholder', 'gender', 'age']
+                    labels = ['回答日時', '同意', '回答者の立場', '性別', '年齢']
+
                     if sh_val == 'patient':
-                        h.extend(['days', 'dept', 'experience'])
+                        keys.extend(['days', 'dept', 'experience'])
+                        labels.extend(['入院日数', '診療科', '入院回数'])
                     elif sh_val == 'nurse':
-                        h.extend(['prof_exp_total', 'prof_exp_current', 'dept', 'shift', 'role'])
+                        keys.extend(['prof_exp_total', 'prof_exp_current', 'dept', 'shift', 'role'])
+                        labels.extend(['看護師経験年数（通算）', '看護師経験年数（現在の病棟）', '診療科', '勤務体制', '役職'])
                     elif sh_val == 'manager':
-                        h.extend(['prof_exp_total', 'prof_exp_current', 'role', 'facility_type', 'beds'])
-                        
+                        keys.extend(['prof_exp_total', 'prof_exp_current', 'role', 'facility_type', 'beds'])
+                        labels.extend(['経験年数（通算）', '現在の施設での役職経験', '役職', '運営施設の種別', '病床数'])
+
                     sh_df = df[df['stakeholder_id'] == sh_val]
                     tps = sh_df['touchpoint_text'].unique()
+                    
                     for tp_idx, tp in enumerate(tps):
                         q_df = sh_df[sh_df['touchpoint_text'] == tp]
                         for q_id in q_df['question_text'].unique():
                             opts = q_df[q_df['question_text'] == q_id]
                             for _, row in opts.iterrows():
-                                h.append(f"val_{sh_val}_tp{tp_idx}_q{q_id}_opt{row['option_id']}_item{row['item_id']}")
-                            # その他の列を強制的に固定位置に用意する
-                            h.append(f"other_label_{sh_val}_tp{tp_idx}_q{q_id}")
-                            h.append(f"other_val_{sh_val}_tp{tp_idx}_q{q_id}")
-                    h.extend(['factors_4_text', 'factors_3_text'])
-                    return h
+                                keys.append(f"val_{sh_val}_tp{tp_idx}_q{q_id}_opt{row['option_id']}_item{row['item_id']}")
+                                labels.append(f"【{tp}】 {q_id}：{row['option_text']}")
+                            
+                            keys.append(f"other_label_{sh_val}_tp{tp_idx}_q{q_id}")
+                            labels.append(f"【{tp}】 {q_id}：その他（自由記述）")
+                            
+                            keys.append(f"other_val_{sh_val}_tp{tp_idx}_q{q_id}")
+                            labels.append(f"【{tp}】 {q_id}：その他（評価値）")
+
+                    return keys, labels
                 
-                # 4. 固定ヘッダーに従って、入力されたデータを抽出（未入力の「その他」は空欄になる）
-                headers = get_fixed_headers(sh, df_master)
-                values = [answers_to_save.get(h, "") for h in headers]
+                # 4. ヘッダー情報の取得とデータの抽出
+                keys, readable_labels = get_fixed_headers_and_labels(sh, df_master)
+                values = [answers_to_save.get(k, "") for k in keys]
                 
-                # シートが真っ白なら、1行目に項目名（キー）を書き込む
+                # シートが真っ白（白紙）なら、1行目に「わかりやすい日本語ヘッダー」を書き込む
                 if not worksheet.get_all_values():
-                    worksheet.append_row(headers)
+                    worksheet.append_row(readable_labels)
                 
                 # データを一番下の行に追加
                 worksheet.append_row(values)
@@ -524,7 +471,7 @@ elif st.session_state.step == "final_submit":
                 st.error(f"データ保存中にエラーが発生しました: {e}")
 
 # =========================================================
-# 7. 終了画面
+# 6. 終了画面
 # =========================================================
 elif st.session_state.step == "thanks":
     st.success("多くの質問へのご回答そしてご協力、誠にありがとうございました。")
