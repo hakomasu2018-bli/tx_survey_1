@@ -459,8 +459,18 @@ elif st.session_state.step == "final_submit":
                 keys, readable_labels = get_fixed_headers_and_labels(sh, df_master)
                 values = [answers_to_save.get(k, "") for k in keys]
                 
-                # シートが真っ白（白紙）なら、1行目に「わかりやすい日本語ヘッダー」を書き込む
-                if not worksheet.get_all_values():
+                # 5. シートが実質的に空かどうかを確認する強力なチェック
+                all_vals = worksheet.get_all_values()
+                is_empty = True
+                for r in all_vals:
+                    # どれか1つのセルでも文字が入っていれば「空ではない」と判定
+                    if any(str(c).strip() != "" for c in r):
+                        is_empty = False
+                        break
+                        
+                # 完全に空っぽ（または消しただけの状態）の場合は、シートをリセットしてヘッダーを挿入
+                if is_empty:
+                    worksheet.clear()
                     worksheet.append_row(readable_labels)
                 
                 # データを一番下の行に追加
