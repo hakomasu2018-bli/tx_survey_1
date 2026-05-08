@@ -10,19 +10,6 @@ import json
 FILE_MASTER = "options_master.xlsx"
 IMAGE_EXAMPLE = "example.png" # 記入例の画像ファイル名
 
-# --- 重要視する要因の選択肢マスタ（ステークホルダー別） ---
-FACTORS_4 = {
-    "patient": ["説明が分かりやすいこと", "予定・処置の見通しが立つこと", "医療者の接遇が丁寧であること", "希望・不安を伝えやすいこと", "必要時にすぐ対応してもらえること", "患者に合わせた対応を受けられること", "医療・ケアが安全に行われること", "身体的な負担が少ないこと", "病室・病棟環境が快適であること", "プライバシーに配慮されること", "周囲とのつながりを保てること"],
-    "nurse": ["患者と向き合う時間が確保されていること", "患者の状態・希望を把握できていること", "患者に合わせたケアが行えること", "患者への接遇が適切であること", "患者の尊厳・プライバシーに配慮できていること", "医療安全が確保されていること", "記録・情報共有が円滑であること", "多職種との連携が円滑であること", "業務量・時間的負担が過度でないこと", "物品・設備が利用しやすいこと", "病室・病棟環境を維持できること"],
-    "manager": ["説明が適切に行われること", "接遇・声かけが丁寧であること", "必要時の対応が確実であること", "医療安全を確保できること", "病室・病棟環境を維持できること", "情報共有・記録が正確であること", "多職種が連携しやすいこと", "手順・判断基準が明確であること", "医療従事者の負担が軽減されること", "物品・設備を管理しやすいこと", "費用対効果が高いこと"]
-}
-
-FACTORS_3 = {
-    "patient": ["安心できること", "理解・納得できること", "医療者を信頼できること", "不安が少ないこと", "尊厳が保たれること", "自分らしく過ごせること", "身体的に楽であること"],
-    "nurse": ["医療の質・安全を維持できること", "業務を効率的に進められること", "専門性を発揮できること", "心身の余裕を保てること", "チームで協力できること", "誠実なケアを提供できること", "患者との信頼関係を築けること"],
-    "manager": ["運営が安定していること", "医療の質・安全を維持できること", "患者との信頼関係を築けること", "働きやすい職場をつくれること", "資源を妥当に活用できること", "収益性・持続可能性を確保できること", "組織改善・成長につながること"]
-}
-
 st.set_page_config(page_title="TXアンケートシステム", layout="centered")
 
 # セッション状態の初期化
@@ -51,8 +38,7 @@ def display_progress():
     elif st.session_state.step == "survey_page":
         sh = st.session_state.answers.get('stakeholder', 'patient')
         tps = df_master[df_master['stakeholder_id'] == sh]['touchpoint_text'].unique()
-        progress = 0.20 + (st.session_state.current_tp_idx / len(tps)) * 0.70
-    elif st.session_state.step == "factors_page": progress = 0.95
+        progress = 0.20 + (st.session_state.current_tp_idx / len(tps)) * 0.80
     else: progress = 1.0
     st.progress(progress, text="アンケート進捗状況")
 
@@ -85,22 +71,28 @@ if st.session_state.step == "consent":
     
     st.markdown("---")
     
-    c_index = ["未選択", "同意する", "同意しない"].index(st.session_state.answers.get("consent", "未選択"))
-    consent = st.radio("回答への同意：", ["未選択", "同意する", "同意しない"], index=c_index, horizontal=True)
+    # 初期状態を未選択（None）にする
+    consent = st.radio("回答への同意：", ["同意する", "同意しない"], index=None, horizontal=True)
     
     sh_options = ["patient", "nurse", "manager"]
-    sh_index = sh_options.index(st.session_state.answers.get("stakeholder", "patient"))
-    stakeholder = st.selectbox("あなたの立場を選択してください", sh_options, index=sh_index, format_func=lambda x: {"patient":"患者", "nurse":"看護師", "manager":"経営者"}[x])
+    stakeholder = st.selectbox(
+        "あなたの立場を選択してください", 
+        sh_options, 
+        index=None, 
+        format_func=lambda x: {"patient":"患者", "nurse":"看護師", "manager":"経営者"}[x] if x else "選択してください"
+    )
     
     if st.button("次へ", type="primary"):
-        if consent == "同意する":
+        if consent is None:
+            st.error("「回答への同意」を選択してください。")
+        elif stakeholder is None:
+            st.error("「あなたの立場」を選択してください。")
+        elif consent == "同意する":
             st.session_state.answers['consent'] = consent
             st.session_state.answers['stakeholder'] = stakeholder
             next_step("profile")
         elif consent == "同意しない":
             next_step("end_denied")
-        else:
-            st.error("「同意する」または「同意しない」を選択してください。")
 
 # =========================================================
 # 2. 属性入力ページ
@@ -110,30 +102,31 @@ elif st.session_state.step == "profile":
     sh = st.session_state.answers['stakeholder']
 
     with st.form("profile_form"):
-        st.radio("性別：", ["男性", "女性", "その他"], key="prof_gender", horizontal=True)
+        # 初期状態を未選択（index=None）にする
+        st.radio("性別：", ["男性", "女性", "その他"], index=None, key="prof_gender", horizontal=True)
         st.text_input("年齢（代）：（半角数字 例：20、30など）", key="prof_age")
         
         if sh == "patient":
             st.text_input("入院日数（日）：（半角数字）", key="prof_days")
             st.text_input("診療科：", key="prof_dept")
-            st.radio("入院回数：", ["初めて", "2回目以上"], key="prof_exp", horizontal=True)
+            st.radio("入院回数：", ["初めて", "2回目以上"], index=None, key="prof_exp", horizontal=True)
 
         elif sh == "nurse":
             st.text_input("看護師経験年数（通算 年）：（半角数字）", key="prof_exp_total")
             st.text_input("看護師経験年数（現在の病棟 年）：（半角数字）", key="prof_exp_current")
             st.text_input("診療科：", key="prof_dept")
-            st.radio("勤務体制：", ["日勤", "夜勤", "その他"], key="prof_shift", horizontal=True)
+            st.radio("勤務体制：", ["日勤", "夜勤", "その他"], index=None, key="prof_shift", horizontal=True)
             st.text_input("勤務体制（その他の場合）：", key="prof_shift_other")
-            st.radio("役職：", ["一般看護師", "リーダー・主任", "看護師長", "その他"], key="prof_role", horizontal=True)
+            st.radio("役職：", ["一般看護師", "リーダー・主任", "看護師長", "その他"], index=None, key="prof_role", horizontal=True)
             st.text_input("役職（その他の場合）：", key="prof_role_other")
 
         elif sh == "manager":
             st.text_input("経営に関わる経験年数（通算 年）：（半角数字）", key="prof_exp_total")
             st.text_input("現在の施設での役職経験（年）：（半角数字）", key="prof_exp_current")
             st.text_input("役職：", key="prof_role")
-            st.radio("運営施設の種別：", ["一般病院", "特定機能病院", "地域医療支援病院", "精神病院", "その他"], key="prof_fac", horizontal=True)
+            st.radio("運営施設の種別：", ["一般病院", "特定機能病院", "地域医療支援病院", "精神病院", "その他"], index=None, key="prof_fac", horizontal=True)
             st.text_input("運営施設の種別（その他の場合）：", key="prof_fac_other")
-            st.radio("病床数：", ["20〜99床", "100〜199床", "200〜499床", "500床以上"], key="prof_beds", horizontal=True)
+            st.radio("病床数：", ["20〜99床", "100〜199床", "200〜499床", "500床以上"], index=None, key="prof_beds", horizontal=True)
             
         col1, col2 = st.columns([1, 1])
         with col1:
@@ -149,6 +142,13 @@ elif st.session_state.step == "profile":
         errors = []
         p_ans = {}
         
+        # 共通：性別
+        if not st.session_state.prof_gender:
+            is_valid = False; errors.append("性別が未選択です。")
+        else:
+            p_ans["gender"] = st.session_state.prof_gender
+
+        # 共通：年齢
         val_age = st.session_state.prof_age
         if not val_age:
             is_valid = False; errors.append("年齢が未入力です。")
@@ -156,9 +156,8 @@ elif st.session_state.step == "profile":
             norm_age = unicodedata.normalize('NFKC', val_age)
             if not norm_age.isdigit(): is_valid = False; errors.append("年齢は半角数字で入力してください。")
             else: p_ans["age"] = norm_age + "代"
-            
-        p_ans["gender"] = st.session_state.prof_gender
 
+        # 患者のバリデーション
         if sh == "patient":
             val_days = st.session_state.prof_days
             if not val_days: is_valid = False; errors.append("入院日数が未入力です。")
@@ -166,10 +165,16 @@ elif st.session_state.step == "profile":
                 norm_days = unicodedata.normalize('NFKC', val_days)
                 if not norm_days.isdigit(): is_valid = False; errors.append("入院日数は半角数字で入力してください。")
                 else: p_ans["days"] = norm_days
+                
             p_ans["dept"] = st.session_state.prof_dept
             if not p_ans["dept"]: is_valid = False; errors.append("診療科が未入力です。")
-            p_ans["experience"] = st.session_state.prof_exp
             
+            if not st.session_state.prof_exp:
+                is_valid = False; errors.append("入院回数が未選択です。")
+            else:
+                p_ans["experience"] = st.session_state.prof_exp
+            
+        # 看護師のバリデーション
         elif sh == "nurse":
             for k, label in [("prof_exp_total", "看護師経験年数（通算）"), ("prof_exp_current", "看護師経験年数（現在の病棟）")]:
                 v = st.session_state[k]
@@ -178,15 +183,25 @@ elif st.session_state.step == "profile":
                     nv = unicodedata.normalize('NFKC', v)
                     if not nv.isdigit(): is_valid = False; errors.append(f"{label}は半角数字で入力してください。")
                     else: p_ans[k] = nv
+                    
             p_ans["dept"] = st.session_state.prof_dept
             if not p_ans["dept"]: is_valid = False; errors.append("診療科が未入力です。")
-            p_ans["shift"] = st.session_state.prof_shift_other if st.session_state.prof_shift == "その他" else st.session_state.prof_shift
-            if st.session_state.prof_shift == "その他" and not st.session_state.prof_shift_other:
-                is_valid = False; errors.append("勤務体制（その他）の詳細を入力してください。")
-            p_ans["role"] = st.session_state.prof_role_other if st.session_state.prof_role == "その他" else st.session_state.prof_role
-            if st.session_state.prof_role == "その他" and not st.session_state.prof_role_other:
-                is_valid = False; errors.append("役職（その他）の詳細を入力してください。")
+            
+            if not st.session_state.prof_shift:
+                is_valid = False; errors.append("勤務体制が未選択です。")
+            else:
+                p_ans["shift"] = st.session_state.prof_shift_other if st.session_state.prof_shift == "その他" else st.session_state.prof_shift
+                if st.session_state.prof_shift == "その他" and not st.session_state.prof_shift_other:
+                    is_valid = False; errors.append("勤務体制（その他）の詳細を入力してください。")
+                    
+            if not st.session_state.prof_role:
+                is_valid = False; errors.append("役職が未選択です。")
+            else:
+                p_ans["role"] = st.session_state.prof_role_other if st.session_state.prof_role == "その他" else st.session_state.prof_role
+                if st.session_state.prof_role == "その他" and not st.session_state.prof_role_other:
+                    is_valid = False; errors.append("役職（その他）の詳細を入力してください。")
                 
+        # 経営者のバリデーション
         elif sh == "manager":
             for k, label in [("prof_exp_total", "経験年数（通算）"), ("prof_exp_current", "現在の施設での役職経験")]:
                 v = st.session_state[k]
@@ -195,12 +210,21 @@ elif st.session_state.step == "profile":
                     nv = unicodedata.normalize('NFKC', v)
                     if not nv.isdigit(): is_valid = False; errors.append(f"{label}は半角数字で入力してください。")
                     else: p_ans[k] = nv
+                    
             p_ans["role"] = st.session_state.prof_role
             if not p_ans["role"]: is_valid = False; errors.append("役職が未入力です。")
-            p_ans["facility_type"] = st.session_state.prof_fac_other if st.session_state.prof_fac == "その他" else st.session_state.prof_fac
-            if st.session_state.prof_fac == "その他" and not st.session_state.prof_fac_other:
-                is_valid = False; errors.append("運営施設の種別（その他）の詳細を入力してください。")
-            p_ans["beds"] = st.session_state.prof_beds
+            
+            if not st.session_state.prof_fac:
+                is_valid = False; errors.append("運営施設の種別が未選択です。")
+            else:
+                p_ans["facility_type"] = st.session_state.prof_fac_other if st.session_state.prof_fac == "その他" else st.session_state.prof_fac
+                if st.session_state.prof_fac == "その他" and not st.session_state.prof_fac_other:
+                    is_valid = False; errors.append("運営施設の種別（その他）の詳細を入力してください。")
+                    
+            if not st.session_state.prof_beds:
+                is_valid = False; errors.append("病床数が未選択です。")
+            else:
+                p_ans["beds"] = st.session_state.prof_beds
 
         if is_valid:
             st.session_state.answers.update(p_ans)
@@ -363,7 +387,7 @@ elif st.session_state.step == "survey_page":
             else:
                 next_step("instructions")
     with col2:
-        button_label = "次のテーマへ進む" if st.session_state.current_tp_idx < len(tps) - 1 else "重要視する要因の調査へ進む"
+        button_label = "次のテーマへ進む" if st.session_state.current_tp_idx < len(tps) - 1 else "最終確認へ進む"
         
         # 合計が1.0でない場合は警告を出し、ボタンを無効化する
         if not all_valid:
@@ -372,61 +396,12 @@ elif st.session_state.step == "survey_page":
         if st.button(button_label, type="primary", disabled=not all_valid):
             st.session_state.current_tp_idx += 1
             if st.session_state.current_tp_idx >= len(tps):
-                next_step("factors_page")
+                next_step("final_submit")
             else:
                 st.rerun()
 
 # =========================================================
-# 5. 重要視する要因に関する調査（チェックボックス版）
-# =========================================================
-elif st.session_state.step == "factors_page":
-    st.header("03　重要視する要因に関する調査")
-    sh = st.session_state.answers['stakeholder']
-    label_context = {"patient": "入院生活", "nurse": "業務", "manager": "病院運営"}[sh]
-    st.write(f"{label_context}において特に重視する要因をお答えください。")
-    st.markdown("---")
-    
-    st.subheader("【1】以下の中から、特に重視するものを 4つ 選択してください。")
-    selected_4 = []
-    prev_selected_4 = st.session_state.answers.get('factors_4_list', [])
-    for factor in FACTORS_4[sh]:
-        is_checked = st.checkbox(factor, value=(factor in prev_selected_4), key=f"chk4_{factor}")
-        if is_checked:
-            selected_4.append(factor)
-            
-    st.write("")
-    
-    st.subheader("【2】以下の中から、特に重視するものを 3つ 選択してください。")
-    selected_3 = []
-    prev_selected_3 = st.session_state.answers.get('factors_3_list', [])
-    for factor in FACTORS_3[sh]:
-        is_checked = st.checkbox(factor, value=(factor in prev_selected_3), key=f"chk3_{factor}")
-        if is_checked:
-            selected_3.append(factor)
-
-    st.markdown("---")
-    
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        if st.button("アンケート（前ページ）へ戻る", type="secondary"):
-            tps = df_master[df_master['stakeholder_id'] == sh]['touchpoint_text'].unique()
-            st.session_state.current_tp_idx = len(tps) - 1
-            next_step("survey_page")
-    with col2:
-        if st.button("最終確認へ進む", type="primary"):
-            if len(selected_4) != 4:
-                st.error(f"【1】の設問は必ず「4つ」選択してください。（現在 {len(selected_4)}個 選択中）")
-            elif len(selected_3) != 3:
-                st.error(f"【2】の設問は必ず「3つ」選択してください。（現在 {len(selected_3)}個 選択中）")
-            else:
-                st.session_state.answers['factors_4_list'] = selected_4
-                st.session_state.answers['factors_3_list'] = selected_3
-                st.session_state.answers['factors_4_text'] = ", ".join(selected_4)
-                st.session_state.answers['factors_3_text'] = ", ".join(selected_3)
-                next_step("final_submit")
-
-# =========================================================
-# 6. 最終送信ページ
+# 5. 最終送信ページ
 # =========================================================
 elif st.session_state.step == "final_submit":
     st.header("アンケートの完了")
@@ -435,14 +410,15 @@ elif st.session_state.step == "final_submit":
     
     col1, col2 = st.columns([1, 1])
     with col1:
-        if st.button("要因の調査へ戻る", type="secondary"):
-            next_step("factors_page")
+        if st.button("アンケートへ戻る", type="secondary"):
+            sh = st.session_state.answers['stakeholder']
+            tps = df_master[df_master['stakeholder_id'] == sh]['touchpoint_text'].unique()
+            st.session_state.current_tp_idx = len(tps) - 1
+            next_step("survey_page")
     with col2:
         if st.button("アンケートを送信する", type="primary"):
             st.session_state.answers['timestamp'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             answers_to_save = st.session_state.answers.copy()
-            answers_to_save.pop('factors_4_list', None)
-            answers_to_save.pop('factors_3_list', None)
             
             try:
                 credentials_dict = json.loads(st.secrets["gcp_service_account"])
@@ -461,7 +437,7 @@ elif st.session_state.step == "final_submit":
                 st.error(f"データ保存中にエラーが発生しました: {e}")
 
 # =========================================================
-# 7. 終了画面
+# 6. 終了画面
 # =========================================================
 elif st.session_state.step == "thanks":
     st.success("多くの質問へのご回答そしてご協力、誠にありがとうございました。")
