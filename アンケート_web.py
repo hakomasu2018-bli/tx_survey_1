@@ -245,7 +245,7 @@ elif st.session_state.step == "instructions":
     
     st.markdown("""
     <div style='background-color: #f0f2f6; padding: 20px; border-radius: 5px; margin-bottom: 20px;'>
-        <p>❖ 各設問において、<strong>選択肢の重要度の合計が「1.00」になるように</strong>スライダーを動かして配分してください。（※全体を 1.00 とした相対評価です）</p>
+        <p>❖ 各設問において、<strong>選択肢の重要度の合計が「1.00」になるように</strong>スライダーや「＋」「－」ボタンを使って配分してください。</p>
         <p>❖ 最も重視する項目に高い数値を、重視しない項目には 0 に近い数値を割り当てます。バーの長さを目安に直感的に配分してください。</p>
         <p>❖ 画面上部に合計値のバーが表示されます。<strong>合計がぴったり 1.00（緑色）にならないと、次の画面に進むことができません。</strong></p>
         <p>❖ その他、加えたい内容がある場合は、任意でご記入ください。（※「その他」に入力した場合、その項目も合計 1.00 の配分に含めてください）</p>
@@ -254,8 +254,8 @@ elif st.session_state.step == "instructions":
     </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("### 【配分のイメージ】")
-    st.write("例：4つの選択肢がある場合、「0.40」「0.30」「0.20」「0.10」のように、足して 1.00 になるように調整します。")
+    st.markdown("### 【操作方法】")
+    st.write("スライダーを左右に動かすか、両端の **「＋」「－」ボタン** を押して数値を 0.01 ずつ微調整してください。")
         
     st.markdown("---")
     
@@ -269,14 +269,13 @@ elif st.session_state.step == "instructions":
             next_step("survey_page")
 
 # =========================================================
-# 4. アンケート本編（コンスタントサム形式）
+# 4. アンケート本編（コンスタントサム・ボタン付）
 # =========================================================
 elif st.session_state.step == "survey_page":
     st.markdown("""
         <style>
-            div[data-testid="stTickBar"] {
-                display: none !important;
-            }
+            div[data-testid="stTickBar"] { display: none !important; }
+            div[data-testid="column"] button { width: 100% !important; padding: 5px !important; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -285,85 +284,61 @@ elif st.session_state.step == "survey_page":
     current_tp = tps[st.session_state.current_tp_idx]
     
     st.header(f"Q{st.session_state.current_tp_idx + 1}. {current_tp}")
-    st.write("")
     
     q_df = df_master[(df_master['stakeholder_id'] == sh) & (df_master['touchpoint_text'] == current_tp)]
     
     all_valid = True
     
-    def get_slider_val(k):
-        if k in st.session_state:
-            return float(st.session_state[k])
-        return float(st.session_state.answers.get(k, 0.00))
+    # 値の取得・増減用関数
+    def get_val(k):
+        if k not in st.session_state: st.session_state[k] = 0.00
+        return float(st.session_state[k])
 
     for q_id in q_df['question_text'].unique():
         options = q_df[q_df['question_text'] == q_id]
         
-        slider_keys = []
-        for _, row in options.iterrows():
-            slider_keys.append(f"val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}_opt{row['option_id']}_item{row['item_id']}")
-            
+        # 合計値の計算
+        slider_keys = [f"val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}_opt{row['option_id']}_item{row['item_id']}" for _, row in options.iterrows()]
         other_key_text = f"other_text_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
         other_key_val = f"other_val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
+        if st.session_state.get(other_key_text): slider_keys.append(other_key_val)
         
-        current_other_text = st.session_state.get(other_key_text, "")
-        if current_other_text:
-            slider_keys.append(other_key_val)
-            
-        current_sum = round(sum(get_slider_val(k) for k in slider_keys), 2)
+        current_sum = round(sum(get_val(k) for k in slider_keys), 2)
         
-        if current_sum == 1.00:
-            bar_color = "#4CAF50"
-            status_text = "✅ 合計: 1.00（配分完了）"
-        elif current_sum > 1.00:
-            bar_color = "#F44336"
-            over = round(current_sum - 1.00, 2)
-            status_text = f"⚠️ 合計: {current_sum:.2f}（{over:.2f} 超過しています）"
-            all_valid = False
-        else:
-            bar_color = "#FFC107"
-            short = round(1.00 - current_sum, 2)
-            status_text = f"⏳ 合計: {current_sum:.2f}（あと {short:.2f} 足りません）"
-            all_valid = False
-            
-        bar_width = min(current_sum * 100, 100)
+        # ゲージ表示
+        bar_color = "#4CAF50" if current_sum == 1.00 else ("#F44336" if current_sum > 1.00 else "#FFC107")
+        status_text = f"✅ 合計: 1.00" if current_sum == 1.00 else (f"⚠️ 合計: {current_sum:.2f} (超過)" if current_sum > 1.00 else f"⏳ 合計: {current_sum:.2f} (不足)")
+        if current_sum != 1.00: all_valid = False
         
         st.markdown(f"""
-            <div style='background-color: #e0e0e0; border-radius: 5px; width: 100%; height: 20px; margin-bottom: 5px;'>
-                <div style='background-color: {bar_color}; width: {bar_width}%; height: 100%; border-radius: 5px; transition: width 0.3s;'></div>
+            <div style='background-color:#e0e0e0; border-radius:5px; width:100%; height:15px;'>
+                <div style='background-color:{bar_color}; width:{min(current_sum*100,100)}%; height:100%; border-radius:5px; transition:0.3s;'></div>
             </div>
-            <div style='text-align: right; font-weight: bold; color: {bar_color}; margin-bottom: 15px;'>{status_text}</div>
+            <div style='text-align:right; font-weight:bold; color:{bar_color}; font-size:14px; margin-bottom:10px;'>{status_text}</div>
         """, unsafe_allow_html=True)
         
+        # 各スライダー（ボタン付き）の描画
+        def draw_adjustable_slider(label, key):
+            st.write(f"**{label}**")
+            c_m, c_s, c_p = st.columns([1, 8, 1])
+            with c_m:
+                if st.button("－", key=f"min_btn_{key}"):
+                    st.session_state[key] = round(max(0.00, get_val(key) - 0.01), 2)
+                    st.rerun()
+            with c_s:
+                st.session_state[key] = st.slider(label, 0.00, 1.00, get_val(key), 0.01, format="%.2f", key=key, label_visibility="collapsed")
+            with c_p:
+                if st.button("＋", key=f"pls_btn_{key}"):
+                    st.session_state[key] = round(min(1.00, get_val(key) + 0.01), 2)
+                    st.rerun()
+
         for _, row in options.iterrows():
-            key = f"val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}_opt{row['option_id']}_item{row['item_id']}"
-            st.session_state.answers[key] = st.slider(
-                row['option_text'], 
-                min_value=0.00, 
-                max_value=1.00, 
-                value=float(st.session_state.answers.get(key, 0.00)), 
-                step=0.01, 
-                format="%.2f", 
-                key=key
-            )
+            draw_adjustable_slider(row['option_text'], slider_keys.pop(0))
             
         other_text = st.text_input("その他（上記以外）：", key=other_key_text)
         if other_text:
-            st.session_state.answers[other_key_val] = st.slider(
-                f"「{other_text}」の評価", 
-                min_value=0.00, 
-                max_value=1.00, 
-                value=float(st.session_state.answers.get(other_key_val, 0.00)), 
-                step=0.01, 
-                format="%.2f", 
-                key=other_key_val
-            )
+            draw_adjustable_slider(f"「{other_text}」の評価", other_key_val)
             st.session_state.answers[f"other_label_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"] = other_text
-        else:
-            if other_key_val in st.session_state.answers:
-                st.session_state.answers[other_key_val] = 0.00
-                st.session_state[other_key_val] = 0.00
-
         st.markdown("---")
         
     col1, col2 = st.columns([1, 1])
@@ -376,11 +351,10 @@ elif st.session_state.step == "survey_page":
                 next_step("instructions")
     with col2:
         button_label = "最終確認へ進む" if st.session_state.current_tp_idx >= len(tps) - 1 else "次のテーマへ進む"
-        
-        if not all_valid:
-            st.warning("⚠️ すべての設問の合計を 1.00 にしてください")
-            
         if st.button(button_label, type="primary", disabled=not all_valid):
+            # スライダーの値をanswersに反映
+            for k in st.session_state:
+                if k.startswith("val_") or k.startswith("other_val_"): st.session_state.answers[k] = st.session_state[k]
             st.session_state.current_tp_idx += 1
             if st.session_state.current_tp_idx >= len(tps):
                 next_step("final_submit")
@@ -388,7 +362,7 @@ elif st.session_state.step == "survey_page":
                 st.rerun()
 
 # =========================================================
-# 5. 最終送信ページ（シート分割・わかりやすいヘッダー・列固定）
+# 5. 最終送信ページ
 # =========================================================
 elif st.session_state.step == "final_submit":
     st.header("アンケートの完了")
@@ -410,35 +384,26 @@ elif st.session_state.step == "final_submit":
             answers_to_save = st.session_state.answers.copy()
             
             try:
-                # 1. 認証とスプレッドシートへの接続
                 credentials_dict = json.loads(st.secrets["gcp_service_account"])
                 gc = gspread.service_account_from_dict(credentials_dict)
                 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1kkZiyhLeOJnM0ypLpzytZZiVYhJBcRsc7bVnCXdhICk/edit"
                 sh_doc = gc.open_by_url(SPREADSHEET_URL)
                 
-                # 2. ステークホルダーごとに保存先のシート（Sheet1, 2, 3）を振り分ける
                 sheet_name_map = {"patient": "Sheet1", "nurse": "Sheet2", "manager": "Sheet3"}
-                target_sheet_name = sheet_name_map.get(sh, "Sheet1")
-                worksheet = sh_doc.worksheet(target_sheet_name)
+                worksheet = sh_doc.worksheet(sheet_name_map.get(sh, "Sheet1"))
                 
-                # 3. 内部用キーと、スプレッドシート用の「わかりやすい日本語ヘッダー」を作成する関数
                 def get_fixed_headers_and_labels(sh_val, df):
                     keys = ['timestamp', 'consent', 'stakeholder', 'gender', 'age']
                     labels = ['回答日時', '同意', '回答者の立場', '性別', '年齢']
-
                     if sh_val == 'patient':
-                        keys.extend(['days', 'dept', 'experience'])
-                        labels.extend(['入院日数', '診療科', '入院回数'])
+                        keys.extend(['days', 'dept', 'experience']); labels.extend(['入院日数', '診療科', '入院回数'])
                     elif sh_val == 'nurse':
-                        keys.extend(['prof_exp_total', 'prof_exp_current', 'dept', 'shift', 'role'])
-                        labels.extend(['看護師経験年数（通算）', '看護師経験年数（現在の病棟）', '診療科', '勤務体制', '役職'])
+                        keys.extend(['prof_exp_total', 'prof_exp_current', 'dept', 'shift', 'role']); labels.extend(['看護師経験年数（通算）', '看護師経験年数（現在の病棟）', '診療科', '勤務体制', '役職'])
                     elif sh_val == 'manager':
-                        keys.extend(['prof_exp_total', 'prof_exp_current', 'role', 'facility_type', 'beds'])
-                        labels.extend(['経験年数（通算）', '現在の施設での役職経験', '役職', '運営施設の種別', '病床数'])
+                        keys.extend(['prof_exp_total', 'prof_exp_current', 'role', 'facility_type', 'beds']); labels.extend(['経験年数（通算）', '現在の施設での役職経験', '役職', '運営施設の種別', '病床数'])
 
                     sh_df = df[df['stakeholder_id'] == sh_val]
                     tps = sh_df['touchpoint_text'].unique()
-                    
                     for tp_idx, tp in enumerate(tps):
                         q_df = sh_df[sh_df['touchpoint_text'] == tp]
                         for q_id in q_df['question_text'].unique():
@@ -446,37 +411,18 @@ elif st.session_state.step == "final_submit":
                             for _, row in opts.iterrows():
                                 keys.append(f"val_{sh_val}_tp{tp_idx}_q{q_id}_opt{row['option_id']}_item{row['item_id']}")
                                 labels.append(f"【{tp}】 {q_id}：{row['option_text']}")
-                            
-                            keys.append(f"other_label_{sh_val}_tp{tp_idx}_q{q_id}")
-                            labels.append(f"【{tp}】 {q_id}：その他（自由記述）")
-                            
-                            keys.append(f"other_val_{sh_val}_tp{tp_idx}_q{q_id}")
-                            labels.append(f"【{tp}】 {q_id}：その他（評価値）")
-
+                            keys.append(f"other_label_{sh_val}_tp{tp_idx}_q{q_id}"); labels.append(f"【{tp}】 {q_id}：その他（自由記述）")
+                            keys.append(f"other_val_{sh_val}_tp{tp_idx}_q{q_id}"); labels.append(f"【{tp}】 {q_id}：その他（評価値）")
                     return keys, labels
                 
-                # 4. ヘッダー情報の取得とデータの抽出
                 keys, readable_labels = get_fixed_headers_and_labels(sh, df_master)
                 values = [answers_to_save.get(k, "") for k in keys]
                 
-                # 5. シートが実質的に空かどうかを確認する強力なチェック
                 all_vals = worksheet.get_all_values()
-                is_empty = True
-                for r in all_vals:
-                    # どれか1つのセルでも文字が入っていれば「空ではない」と判定
-                    if any(str(c).strip() != "" for c in r):
-                        is_empty = False
-                        break
-                        
-                # 完全に空っぽ（または消しただけの状態）の場合は、シートをリセットしてヘッダーを挿入
-                if is_empty:
-                    worksheet.clear()
-                    worksheet.append_row(readable_labels)
-                
-                # データを一番下の行に追加
+                if not any(any(str(c).strip() != "" for c in r) for r in all_vals):
+                    worksheet.clear(); worksheet.append_row(readable_labels)
                 worksheet.append_row(values)
                 next_step("thanks")
-                
             except Exception as e:
                 st.error(f"データ保存中にエラーが発生しました: {e}")
 
@@ -487,6 +433,5 @@ elif st.session_state.step == "thanks":
     st.success("多くの質問へのご回答そしてご協力、誠にありがとうございました。")
     st.write("データが正常に記録されました。このウィンドウを閉じて終了してください。")
     st.balloons()
-
 elif st.session_state.step == "end_denied":
     st.warning("調査への同意が得られなかったため、アンケートを終了します。ご協力ありがとうございました。")
