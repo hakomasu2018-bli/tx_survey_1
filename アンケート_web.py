@@ -90,7 +90,6 @@ if st.session_state.step == "consent":
     
     sh_options = ["patient", "nurse", "manager"]
     sh_index = sh_options.index(st.session_state.answers.get("stakeholder", "patient"))
-    # ★ ここを「経営者」に修正しました
     stakeholder = st.selectbox("あなたの立場を選択してください", sh_options, index=sh_index, format_func=lambda x: {"patient":"患者", "nurse":"看護師", "manager":"経営者"}[x])
     
     if st.button("次へ", type="primary"):
@@ -129,7 +128,6 @@ elif st.session_state.step == "profile":
             st.text_input("役職（その他の場合）：", key="prof_role_other")
 
         elif sh == "manager":
-            # ★ 項目名も「経営者」等に整理しました
             st.text_input("経営に関わる経験年数（通算 年）：（半角数字）", key="prof_exp_total")
             st.text_input("現在の施設での役職経験（年）：（半角数字）", key="prof_exp_current")
             st.text_input("役職：", key="prof_role")
@@ -223,22 +221,20 @@ elif st.session_state.step == "instructions":
     st.header(title_text)
     st.write("以下では、様々な場面について、あなたにとっての理想をお答えいただきます。設問は35題あり、所要時間は20分～30分程度です。")
     
+    # 記入方法の説明文をコンスタントサム用に変更
     st.markdown("""
     <div style='background-color: #f0f2f6; padding: 20px; border-radius: 5px; margin-bottom: 20px;'>
-        <p>❖ <strong>「理想としてどの程度求めるか」</strong>を、スライダーを動かして評価してください。</p>
-        <p>❖ 左端(0)は<span style='color: #d32f2f; font-weight: bold;'>「標準的な対応でよい（普通）」</span>、右端(100)は<span style='color: #d32f2f; font-weight: bold;'>「強く求める」</span>を表します。</p>
-        <p>❖ <span style='color: #1976d2; font-weight: bold;'>すべての選択肢について</span>、空欄にせず印をつけてください。あまり重視しないものは、左端に近い位置に印をつけてください。</p>
+        <p>❖ 各設問において、<strong>選択肢の重要度の合計が「1.0」になるように</strong>スライダーを動かして配分してください。（※全体を 1.0 とした相対評価です）</p>
+        <p>❖ 最も重視する項目に高い数値を、重視しない項目には 0 に近い数値を割り当てます。バーの長さを目安に直感的に配分してください。</p>
+        <p>❖ 画面上部に合計値のバーが表示されます。<strong>合計がぴったり 1.0（緑色）にならないと、次の画面に進むことができません。</strong></p>
         <p>❖ その他、加えたい内容がある場合は、任意でご記入ください。</p>
-        <p>❖ 実際の現場では患者の状態や病棟の状況によって対応が異なると思いますが、本調査では、細かな条件を厳密に想定しすぎず、<strong>直感的にお答えください。</strong></p>
-        <p>❖ 正解はありませんので、一般的に望ましいと思われる回答ではなく、ご自身の率直なお考えをご回答ください。ご回答の内容が、<strong>他の職員の方などに見られることはありません。</strong></p>
+        <p>❖ 実際の現場では患者の状態や病棟の状況によって対応が異なると思いますが、本調査では細かな条件を厳密に想定しすぎず、<strong>直感的にお答えください。</strong></p>
+        <p>❖ 正解はありませんので、一般的に望ましいと思われる回答ではなく、ご自身の率直なお考えをご回答ください。ご回答の内容が他の職員の方などに見られることはありません。</p>
     </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("### 【記入例】")
-    if os.path.exists(IMAGE_EXAMPLE):
-        st.image(IMAGE_EXAMPLE, caption="スライダーの操作イメージ")
-    else:
-        st.info(f"※ここに記入例の画像（{IMAGE_EXAMPLE}）が表示されます。")
+    st.markdown("### 【配分のイメージ】")
+    st.write("例：4つの選択肢がある場合、「0.40」「0.30」「0.20」「0.10」のように、足して 1.0 になるように調整します。")
         
     st.markdown("---")
     
@@ -252,9 +248,18 @@ elif st.session_state.step == "instructions":
             next_step("survey_page")
 
 # =========================================================
-# 4. アンケート本編
+# 4. アンケート本編（コンスタントサム形式）
 # =========================================================
 elif st.session_state.step == "survey_page":
+    # --- スライダー両端の数値（0.00や1.00）をCSSで非表示にする ---
+    st.markdown("""
+        <style>
+            div[data-testid="stTickBar"] {
+                display: none !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
     sh = st.session_state.answers['stakeholder']
     tps = df_master[df_master['stakeholder_id'] == sh]['touchpoint_text'].unique()
     current_tp = tps[st.session_state.current_tp_idx]
@@ -264,21 +269,85 @@ elif st.session_state.step == "survey_page":
     
     q_df = df_master[(df_master['stakeholder_id'] == sh) & (df_master['touchpoint_text'] == current_tp)]
     
+    all_valid = True # ページ内のすべての設問が合計1.0になっているか判定用フラグ
+    
+    # セッションステートから最新のスライダー値を取得するヘルパー関数
+    def get_slider_val(k):
+        if k in st.session_state:
+            return st.session_state[k]
+        return st.session_state.answers.get(k, 0.0)
+
     for q_id in q_df['question_text'].unique():
         options = q_df[q_df['question_text'] == q_id]
+        
+        # 1. 設問のキーを収集
+        slider_keys = []
         for _, row in options.iterrows():
-            key = f"val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}_opt{row['option_id']}_item{row['item_id']}"
-            st.session_state.answers[key] = st.slider(row['option_text'], 0, 100, 0, key=key)
+            slider_keys.append(f"val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}_opt{row['option_id']}_item{row['item_id']}")
             
         other_key_text = f"other_text_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
+        other_key_val = f"other_val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
+        
+        # その他の入力があるか確認し、あればキーを追加
         other_text = st.text_input("その他（上記以外）：", key=other_key_text)
         if other_text:
-            other_key_val = f"other_val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
-            st.session_state.answers[other_key_val] = st.slider(f"「{other_text}」の評価", 0, 100, 0, key=other_key_val)
+            slider_keys.append(other_key_val)
+            
+        # 2. 現在の合計値を計算（小数の計算誤差を防ぐためround関数を使用）
+        current_sum = round(sum(get_slider_val(k) for k in slider_keys), 2)
+        
+        # 3. 上部バーの描画
+        if current_sum == 1.00:
+            bar_color = "#4CAF50" # 緑
+            status_text = "✅ 合計: 1.00（配分完了）"
+        elif current_sum > 1.00:
+            bar_color = "#F44336" # 赤
+            over = round(current_sum - 1.00, 2)
+            status_text = f"⚠️ 合計: {current_sum:.2f}（{over:.2f} 超過しています）"
+            all_valid = False
+        else:
+            bar_color = "#FFC107" # 黄
+            short = round(1.00 - current_sum, 2)
+            status_text = f"⏳ 合計: {current_sum:.2f}（あと {short:.2f} 足りません）"
+            all_valid = False
+            
+        # ゲージの長さを算出（最大100%）
+        bar_width = min(current_sum * 100, 100)
+        
+        st.markdown(f"""
+            <div style='background-color: #e0e0e0; border-radius: 5px; width: 100%; height: 20px; margin-bottom: 5px;'>
+                <div style='background-color: {bar_color}; width: {bar_width}%; height: 100%; border-radius: 5px; transition: width 0.3s;'></div>
+            </div>
+            <div style='text-align: right; font-weight: bold; color: {bar_color}; margin-bottom: 15px;'>{status_text}</div>
+        """, unsafe_allow_html=True)
+        
+        # 4. スライダーの描画
+        for _, row in options.iterrows():
+            key = f"val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}_opt{row['option_id']}_item{row['item_id']}"
+            st.session_state.answers[key] = st.slider(
+                row['option_text'], 
+                min_value=0.0, 
+                max_value=1.0, 
+                value=st.session_state.answers.get(key, 0.0), 
+                step=0.05, 
+                format="%.2f", 
+                key=key
+            )
+            
+        if other_text:
+            st.session_state.answers[other_key_val] = st.slider(
+                f"「{other_text}」の評価", 
+                min_value=0.0, 
+                max_value=1.0, 
+                value=st.session_state.answers.get(other_key_val, 0.0), 
+                step=0.05, 
+                format="%.2f", 
+                key=other_key_val
+            )
             st.session_state.answers[f"other_label_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"] = other_text
 
-    st.markdown("---")
-    
+        st.markdown("---")
+        
     col1, col2 = st.columns([1, 1])
     with col1:
         if st.button("前のテーマへ戻る", type="secondary"):
@@ -289,7 +358,12 @@ elif st.session_state.step == "survey_page":
                 next_step("instructions")
     with col2:
         button_label = "次のテーマへ進む" if st.session_state.current_tp_idx < len(tps) - 1 else "重要視する要因の調査へ進む"
-        if st.button(button_label, type="primary"):
+        
+        # 合計が1.0でない場合は警告を出し、ボタンを無効化する
+        if not all_valid:
+            st.warning("⚠️ すべての設問の合計を 1.00 にしてください")
+            
+        if st.button(button_label, type="primary", disabled=not all_valid):
             st.session_state.current_tp_idx += 1
             if st.session_state.current_tp_idx >= len(tps):
                 next_step("factors_page")
