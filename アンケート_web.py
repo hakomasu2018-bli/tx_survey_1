@@ -7,7 +7,7 @@ import gspread
 import json
 
 # --- 設定 ---
-FILE_MASTER = "options_master_final.xlsx"
+FILE_MASTER = "options_master.xlsx"
 IMAGE_EXAMPLE = "example.png" # 記入例の画像ファイル名
 
 st.set_page_config(page_title="TXアンケートシステム", layout="centered")
