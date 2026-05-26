@@ -62,7 +62,7 @@ if st.session_state.step in ["consent", "profile"]:
 # 1. 同意・目的ページ
 # =========================================================
 if st.session_state.step == "consent":
-    st.header("01　調査目的と基本情報")
+    st.header("01 調査目的と基本情報")
     st.write("""
     本調査は、慶應義塾大学理工学研究科中西研究室で行う「医療現場における複数のステークホルダーを考慮したエクスペリエンスのモデル化」に関する研究の一環として実施するものです。入院中のさまざまな場面について、立場から見た理想的な対応方針を把握することを目的としています。回答は研究目的のみに使用し、個人が特定される形で公表することはありません。
     
@@ -125,11 +125,14 @@ elif st.session_state.step == "profile":
         st.text_input("現在の施設での役職経験（年）：（半角数字）", key="prof_exp_current")
         st.text_input("役職：", key="prof_role")
         
-        st.radio("運営施設の種別：", ["一般病院", "特定機能病院", "地域医療支援病院", "精神病院", "その他"], index=None, key="prof_fac", horizontal=True)
-        if st.session_state.get("prof_fac") == "その他":
+        # ★経営者向けの「運営施設の種別」を複数選択（マルチセレクト）に変更
+        fac_options = ["一般病院", "特定機能病院", "地域医療支援病院", "精神病院", "その他"]
+        st.multiselect("運営施設の種別（複数選択可）：", fac_options, default=None, key="prof_fac")
+        if "その他" in st.session_state.get("prof_fac", []):
             st.text_input("運営施設の種別（その他の場合）：", key="prof_fac_other")
             
-        st.radio("病床数：", ["20〜99床", "100〜199床", "200〜499床", "500床以上"], index=None, key="prof_beds", horizontal=True)
+        # ★病床数の表現を変更
+        st.radio("総病床数（運営しているすべての施設の合計ベッド数）：", ["20〜99床", "100〜199床", "200〜499床", "500床以上"], index=None, key="prof_beds", horizontal=True)
         
     col1, col2 = st.columns([1, 1])
     with col1:
@@ -211,16 +214,24 @@ elif st.session_state.step == "profile":
             p_ans["role"] = st.session_state.get("prof_role")
             if not p_ans["role"]: is_valid = False; errors.append("役職が未入力です。")
             
-            if not st.session_state.get("prof_fac"):
+            # ★複数選択のバリデーションと保存処理
+            prof_fac = st.session_state.get("prof_fac", [])
+            if not prof_fac:
                 is_valid = False; errors.append("運営施設の種別が未選択です。")
             else:
-                fac_val = st.session_state.get("prof_fac_other", "") if st.session_state.prof_fac == "その他" else st.session_state.prof_fac
-                if st.session_state.prof_fac == "その他" and not fac_val:
-                    is_valid = False; errors.append("運営施設の種別（その他）の詳細を入力してください。")
-                p_ans["facility_type"] = fac_val
+                fac_vals = []
+                for f in prof_fac:
+                    if f == "その他":
+                        other_val = st.session_state.get("prof_fac_other", "")
+                        if not other_val:
+                            is_valid = False; errors.append("運営施設の種別（その他）の詳細を入力してください。")
+                        fac_vals.append(f"その他({other_val})")
+                    else:
+                        fac_vals.append(f)
+                p_ans["facility_type"] = "、".join(fac_vals)
                 
             if not st.session_state.get("prof_beds"):
-                is_valid = False; errors.append("病床数が未選択です。")
+                is_valid = False; errors.append("総病床数が未選択です。")
             else:
                 p_ans["beds"] = st.session_state.prof_beds
 
@@ -236,26 +247,32 @@ elif st.session_state.step == "profile":
 # =========================================================
 elif st.session_state.step == "instructions":
     sh = st.session_state.answers['stakeholder']
-    title_text = {"patient": "02　入院生活における理想に関する調査", 
-                  "nurse": "02　業務場面における理想に関する調査", 
-                  "manager": "02　病院運営における理想に関する調査"}[sh]
+    title_text = {"patient": "02 入院生活における理想に関する調査", 
+                  "nurse": "02 業務場面における理想に関する調査", 
+                  "manager": "02 病院運営における理想に関する調査"}[sh]
     
     st.header(title_text)
     st.write("以下では、様々な場面について、あなたにとっての理想をお答えいただきます。設問は35題あり、所要時間は20分～30分程度です。")
     
-    st.markdown("""
+    # ★看護師・経営者の場合のみ、説明文の一部を赤字で強調
+    if sh in ["nurse", "manager"]:
+        intuitive_text = "<span style='color: #d32f2f; font-weight: bold; font-size: 1.1em;'>直感的にお答えください。</span>"
+    else:
+        intuitive_text = "<strong>直感的にお答えください。</strong>"
+
+    st.markdown(f"""
     <div style='background-color: #f0f2f6; padding: 20px; border-radius: 5px; margin-bottom: 20px;'>
         <p>❖ 各設問において、<strong>選択肢の重要度の合計が「1.00」になるように</strong>スライダーや「＋」「－」ボタンを使って配分してください。</p>
         <p>❖ 最も重視する項目に高い数値を、重視しない項目には 0 に近い数値を割り当てます。バーの長さを目安に直感的に配分してください。</p>
         <p>❖ 画面上部に合計値のバーが表示されます。<strong>合計がぴったり 1.00（緑色）にならないと、次の画面に進むことができません。</strong></p>
         <p>❖ その他、加えたい内容がある場合は、任意でご記入ください。（※「その他」に入力した場合、その項目も合計 1.00 の配分に含めてください）</p>
-        <p>❖ 実際の現場では患者の状態や病棟の状況によって対応が異なると思いますが、本調査では細かな条件を厳密に想定しすぎず、<strong>直感的にお答えください。</strong></p>
+        <p>❖ 実際の現場では患者の状態や病棟の状況によって対応が異なると思いますが、本調査では細かな条件を厳密に想定しすぎず、{intuitive_text}</p>
         <p>❖ 正解はありませんので、一般的に望ましいと思われる回答ではなく、ご自身の率直なお考えをご回答ください。ご回答の内容が他の職員の方などに見られることはありません。</p>
     </div>
     """, unsafe_allow_html=True)
     
     st.markdown("### 【操作方法】")
-    st.write("スライダーを左右に動かすか、両端の **「＋」「－」ボタン** を押して数値を 0.01 ずつ微調整してください。")
+    st.write("スライダーを左右に動かすか、両端の **「＋」「－」ボタン** を押して数値を 0.01 ずつ微調整してください。（※合計が1.00に達すると、それ以上数値を増やすことはできません。増やすためには他の項目の数値を減らす必要があります。）")
         
     st.markdown("---")
     
@@ -269,7 +286,7 @@ elif st.session_state.step == "instructions":
             next_step("survey_page")
 
 # =========================================================
-# 4. アンケート本編（コンスタントサム・ボタン付・コールバック修正版）
+# 4. アンケート本編（コンスタントサム・スライダー制限付き）
 # =========================================================
 elif st.session_state.step == "survey_page":
     st.markdown("""
@@ -289,30 +306,35 @@ elif st.session_state.step == "survey_page":
     
     all_valid = True
     
-    # 値の取得用関数
     def get_val(k):
         if k not in st.session_state: 
             st.session_state[k] = 0.00
         return float(st.session_state[k])
 
-    # ★ ここが修正の要！ボタンを押した時だけ動くコールバック関数
-    def adjust_val(k, delta):
+    # ★ボタン押下時の増減上限を計算するコールバック
+    def adjust_val(k, delta, all_keys):
         val = float(st.session_state.get(k, 0.00))
-        st.session_state[k] = round(max(0.00, min(1.00, val + delta)), 2)
+        current_sum = round(sum(float(st.session_state.get(key, 0.00)) for key in all_keys), 2)
+        # その項目が最大でどこまで増やせるか（1.00 - 現在の合計 + 自分の値）
+        max_allowable = round(1.00 - current_sum + val, 2)
+        new_val = round(val + delta, 2)
+        st.session_state[k] = float(max(0.00, min(max_allowable, new_val)))
 
     for q_id in q_df['question_text'].unique():
         options = q_df[q_df['question_text'] == q_id]
         
-        # 合計値の計算
+        # この設問で使うすべてのスライダーのキーを収集
         slider_keys = [f"val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}_opt{row['option_id']}_item{row['item_id']}" for _, row in options.iterrows()]
         other_key_text = f"other_text_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
         other_key_val = f"other_val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
+        
         if st.session_state.get(other_key_text): 
             slider_keys.append(other_key_val)
         
+        # 現在の合計値
         current_sum = round(sum(get_val(k) for k in slider_keys), 2)
         
-        # ゲージ表示
+        # ゲージの描画
         bar_color = "#4CAF50" if current_sum == 1.00 else ("#F44336" if current_sum > 1.00 else "#FFC107")
         status_text = f"✅ 合計: 1.00" if current_sum == 1.00 else (f"⚠️ 合計: {current_sum:.2f} (超過)" if current_sum > 1.00 else f"⏳ 合計: {current_sum:.2f} (不足)")
         if current_sum != 1.00: 
@@ -325,29 +347,40 @@ elif st.session_state.step == "survey_page":
             <div style='text-align:right; font-weight:bold; color:{bar_color}; font-size:14px; margin-bottom:10px;'>{status_text}</div>
         """, unsafe_allow_html=True)
         
-        # 各スライダー（コールバックボタン付き）の描画
-        def draw_adjustable_slider(label, key):
+        # ★ 各スライダーの描画（動的にmax_valueを制限する）
+        def draw_adjustable_slider(label, key, all_keys):
             if key not in st.session_state:
                 st.session_state[key] = 0.00
                 
+            val = get_val(key)
+            current_sum_all = round(sum(get_val(k) for k in all_keys), 2)
+            
+            # このスライダーが動かせる最大値を計算
+            max_allowable = round(1.00 - current_sum_all + val, 2)
+            # エラー防止のため、最小0.00〜最大1.00の範囲に収め、現在の値(val)を下回らないようにする
+            slider_max = float(max(0.00, min(1.00, max(val, max_allowable))))
+            
             st.write(f"**{label}**")
             c_m, c_s, c_p = st.columns([1, 8, 1])
             with c_m:
-                st.button("－", key=f"min_btn_{key}", on_click=adjust_val, args=(key, -0.01))
+                st.button("－", key=f"min_btn_{key}", on_click=adjust_val, args=(key, -0.01, all_keys))
             with c_s:
-                st.slider(label, min_value=0.00, max_value=1.00, step=0.01, format="%.2f", key=key, label_visibility="collapsed")
+                # 動的に max_value を設定することで、それ以上右にドラッグできなくする
+                st.slider(label, min_value=0.00, max_value=slider_max, step=0.01, format="%.2f", key=key, label_visibility="collapsed")
             with c_p:
-                st.button("＋", key=f"pls_btn_{key}", on_click=adjust_val, args=(key, 0.01))
+                st.button("＋", key=f"pls_btn_{key}", on_click=adjust_val, args=(key, 0.01, all_keys))
 
         # 既存の選択肢のスライダー描画
         for _, row in options.iterrows():
             k = f"val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}_opt{row['option_id']}_item{row['item_id']}"
-            draw_adjustable_slider(row['option_text'], k)
+            draw_adjustable_slider(row['option_text'], k, slider_keys)
             
         # その他のスライダー描画
         other_text = st.text_input("その他（上記以外）：", key=other_key_text)
         if other_text:
-            draw_adjustable_slider(f"「{other_text}」の評価", other_key_val)
+            if other_key_val not in slider_keys:
+                slider_keys.append(other_key_val) # 即座に追加して制限に含める
+            draw_adjustable_slider(f"「{other_text}」の評価", other_key_val, slider_keys)
             st.session_state.answers[f"other_label_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"] = other_text
         else:
             if other_key_val in st.session_state:
@@ -416,7 +449,7 @@ elif st.session_state.step == "final_submit":
                     elif sh_val == 'nurse':
                         keys.extend(['prof_exp_total', 'prof_exp_current', 'dept', 'shift', 'role']); labels.extend(['看護師経験年数（通算）', '看護師経験年数（現在の病棟）', '診療科', '勤務体制', '役職'])
                     elif sh_val == 'manager':
-                        keys.extend(['prof_exp_total', 'prof_exp_current', 'role', 'facility_type', 'beds']); labels.extend(['経験年数（通算）', '現在の施設での役職経験', '役職', '運営施設の種別', '病床数'])
+                        keys.extend(['prof_exp_total', 'prof_exp_current', 'role', 'facility_type', 'beds']); labels.extend(['経験年数（通算）', '現在の施設での役職経験', '役職', '運営施設の種別', '総病床数'])
 
                     sh_df = df[df['stakeholder_id'] == sh_val]
                     tps = sh_df['touchpoint_text'].unique()
@@ -450,4 +483,4 @@ elif st.session_state.step == "thanks":
     st.write("データが正常に記録されました。このウィンドウを閉じて終了してください。")
     st.balloons()
 elif st.session_state.step == "end_denied":
-    st.warning("アンケートを終了します。ご協力ありがとうございました。")
+    st.warning("調査への同意が得られなかったため、アンケートを終了します。ご協力ありがとうございました。")
