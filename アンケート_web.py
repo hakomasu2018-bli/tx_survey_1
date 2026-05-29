@@ -109,7 +109,6 @@ elif st.session_state.step == "profile":
 
     elif sh == "nurse":
         st.text_input("看護師経験年数（通算 年）：（半角数字）", key="prof_exp_total")
-        ##st.text_input("看護師経験年数（現在の病棟 年）：（半角数字）", key="prof_exp_current")
         st.text_input("診療科：", key="prof_dept")
         
         st.radio("勤務体制：", ["日勤", "夜勤", "その他"], index=None, key="prof_shift", horizontal=True)
@@ -122,7 +121,6 @@ elif st.session_state.step == "profile":
 
     elif sh == "manager":
         st.text_input("経営に関わる経験年数（通算 年）：（半角数字）", key="prof_exp_total")
-        ##st.text_input("現在の施設での役職経験（年）：（半角数字）", key="prof_exp_current")
         st.text_input("役職：", key="prof_role")
         
         st.write("運営施設の種別（複数選択可）：")
@@ -184,7 +182,7 @@ elif st.session_state.step == "profile":
                 p_ans["experience"] = st.session_state.prof_exp
             
         elif sh == "nurse":
-            for k, label in [("prof_exp_total", "看護師経験年数（通算）"), ("prof_exp_current", "看護師経験年数（現在の病棟）")]:
+            for k, label in [("prof_exp_total", "看護師経験年数（通算）")]:
                 v = st.session_state.get(k)
                 if not v: is_valid = False; errors.append(f"{label}が未入力です。")
                 else:
@@ -211,7 +209,7 @@ elif st.session_state.step == "profile":
                 p_ans["role"] = role_val
                 
         elif sh == "manager":
-            for k, label in [("prof_exp_total", "経験年数（通算）"), ("prof_exp_current", "現在の施設での役職経験")]:
+            for k, label in [("prof_exp_total", "経験年数（通算）")]:
                 v = st.session_state.get(k)
                 if not v: is_valid = False; errors.append(f"{label}が未入力です。")
                 else:
@@ -316,16 +314,15 @@ elif st.session_state.step == "survey_page":
     def get_val(k):
         return int(float(st.session_state.get(k, 0)))
 
-    # ★ スライダーがマウスで動かされた時に発動する自動補正（スナップバック）
+    # スライダーがマウスで動かされた時に発動する自動補正（スナップバック）
     def slider_changed(k, all_keys):
         val = get_val(k)
         sum_others = sum(get_val(key) for key in all_keys if key != k)
         max_allowable = max(0, 100 - sum_others)
-        # 上限を超えていたら、強制的に上限値に戻す
         if val > max_allowable:
             st.session_state[k] = max_allowable
 
-    # ★ ボタンが押された時の増減関数
+    # ボタンが押された時の増減関数
     def adjust_val(k, delta, all_keys):
         val = get_val(k)
         sum_others = sum(get_val(key) for key in all_keys if key != k)
@@ -344,6 +341,11 @@ elif st.session_state.step == "survey_page":
         other_key_text = f"other_text_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
         other_key_val = f"other_val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
         
+        # 戻ってきた時に以前入力した「その他」の文字を復元する処理
+        other_label_key = f"other_label_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
+        if other_key_text not in st.session_state:
+            st.session_state[other_key_text] = st.session_state.answers.get(other_label_key, "")
+            
         if st.session_state.get(other_key_text): 
             slider_keys.append(other_key_val)
         
@@ -361,10 +363,11 @@ elif st.session_state.step == "survey_page":
             <div style='text-align:right; font-weight:bold; color:{bar_color}; font-size:14px; margin-bottom:10px;'>{status_text}</div>
         """, unsafe_allow_html=True)
         
-        # ★ スライダーの描画（0〜100の整数）
+        # スライダーの描画（0〜100の整数）
         def draw_adjustable_slider(label, key, all_keys):
+            # 前のページから戻ってきた時のために、answersから過去の値を復元する処理
             if key not in st.session_state:
-                st.session_state[key] = 0
+                st.session_state[key] = st.session_state.answers.get(key, 0)
                 
             st.write(f"**{label}**")
             c_m, c_s, c_p = st.columns([1, 8, 1])
@@ -394,16 +397,23 @@ elif st.session_state.step == "survey_page":
             if other_key_val not in slider_keys:
                 slider_keys.append(other_key_val)
             draw_adjustable_slider(f"「{other_text}」の評価", other_key_val, slider_keys)
-            st.session_state.answers[f"other_label_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"] = other_text
+            st.session_state.answers[other_label_key] = other_text
         else:
             if other_key_val in st.session_state:
                 st.session_state[other_key_val] = 0
+            if other_label_key in st.session_state.answers:
+                st.session_state.answers[other_label_key] = ""
                 
         st.markdown("---")
         
     col1, col2 = st.columns([1, 1])
     with col1:
         if st.button("前のテーマへ戻る", type="secondary"):
+            # 【追加】戻るボタンを押した時も、現在入力されている値を安全に保存してから戻る
+            for k in st.session_state:
+                if k.startswith("val_") or k.startswith("other_val_") or k.startswith("other_label_"): 
+                    st.session_state.answers[k] = st.session_state[k]
+                    
             if st.session_state.current_tp_idx > 0:
                 st.session_state.current_tp_idx -= 1
                 st.rerun()
@@ -416,8 +426,9 @@ elif st.session_state.step == "survey_page":
             st.warning("⚠️ すべての設問の合計を 100 にしてください")
             
         if st.button(button_label, type="primary", disabled=not all_valid):
+            # 進む時に入力されている値を保存
             for k in st.session_state:
-                if k.startswith("val_") or k.startswith("other_val_"): 
+                if k.startswith("val_") or k.startswith("other_val_") or k.startswith("other_label_"): 
                     st.session_state.answers[k] = st.session_state[k]
                     
             st.session_state.current_tp_idx += 1
@@ -463,9 +474,9 @@ elif st.session_state.step == "final_submit":
                     if sh_val == 'patient':
                         keys.extend(['days', 'dept', 'experience']); labels.extend(['入院日数', '診療科', '入院回数'])
                     elif sh_val == 'nurse':
-                        keys.extend(['prof_exp_total', 'prof_exp_current', 'dept', 'shift', 'role']); labels.extend(['看護師経験年数（通算）', '看護師経験年数（現在の病棟）', '診療科', '勤務体制', '役職'])
+                        keys.extend(['prof_exp_total', 'dept', 'shift', 'role']); labels.extend(['看護師経験年数（通算）', '診療科', '勤務体制', '役職'])
                     elif sh_val == 'manager':
-                        keys.extend(['prof_exp_total', 'prof_exp_current', 'role', 'facility_type', 'beds']); labels.extend(['経験年数（通算）', '現在の施設での役職経験', '役職', '運営施設の種別', '総病床数'])
+                        keys.extend(['prof_exp_total', 'role', 'facility_type', 'beds']); labels.extend(['経験年数（通算）', '役職', '運営施設の種別', '総病床数'])
 
                     sh_df = df[df['stakeholder_id'] == sh_val]
                     tps = sh_df['touchpoint_text'].unique()
@@ -499,4 +510,4 @@ elif st.session_state.step == "thanks":
     st.write("データが正常に記録されました。このウィンドウを閉じて終了してください。")
     st.balloons()
 elif st.session_state.step == "end_denied":
-    st.warning("アンケートを終了します。ご協力ありがとうございました。") ##「調査への同意が得られなかったため、」は失礼だから書かない
+    st.warning("アンケートを終了します。ご協力ありがとうございました。")
