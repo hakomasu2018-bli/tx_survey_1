@@ -257,19 +257,14 @@ elif st.session_state.step == "instructions":
     
     st.header(title_text)
     st.write("以下では、様々な場面について、あなたにとっての理想をお答えいただきます。設問は35題あり、所要時間は20分～30分程度です。")
-    
-    if sh in ["nurse", "manager"]:
-        intuitive_text = "<span style='color: #d32f2f; font-weight: bold; font-size: 1.1em;'>直感的に配分してください。</span>"
-    else:
-        intuitive_text = "<strong>直感的に配分してください。</strong>"
 
     st.markdown(f"""
     <div style='background-color: #f0f2f6; padding: 20px; border-radius: 5px; margin-bottom: 20px;'>
         <p>❖ 各設問において、<strong>選択肢の重要度の合計が「100」になるように</strong>スライダーや「＋」「－」ボタンを使って配分してください。</p>
-        <p>❖ 最も重視する項目に高い数値を、重視しない項目には 0 に近い数値を割り当てます。バーの長さを目安に{intuitive_text}</p>
+        <p>❖ 最も重視する項目に高い数値を、重視しない項目には 0 に近い数値を割り当てます。バーの長さを目安に直感的に配分してください。</p>
         <p>❖ 画面上部に合計値のバーが表示されます。<strong>合計がぴったり 100（緑色）にならないと、次の画面に進むことができません。</strong></p>
         <p>❖ その他、加えたい内容がある場合は、任意でご記入ください。（※「その他」に入力した場合、その項目も合計 100 の配分に含めてください）</p>
-        <p>❖ 実際の現場では患者の状態や病棟の状況によって対応が異なると思いますが、本調査では細かな条件を厳密に想定しすぎず、直感的にお答えください。</p>
+        <p><span style='color: #d32f2f; font-weight: bold; font-size: 1.1em;'>❖ 実際の現場では患者の状態や病棟の状況によって対応が異なると思いますが、本調査では細かな条件を厳密に想定しすぎず、直感的にお答えください。</span></p>
         <p>❖ 正解はありませんので、一般的に望ましいと思われる回答ではなく、ご自身の率直なお考えをご回答ください。ご回答の内容が他の職員の方などに見られることはありません。</p>
     </div>
     """, unsafe_allow_html=True)
@@ -310,11 +305,9 @@ elif st.session_state.step == "survey_page":
     
     all_valid = True
     
-    # 整数の値を取得する関数（0〜100）
     def get_val(k):
         return int(float(st.session_state.get(k, 0)))
 
-    # スライダーがマウスで動かされた時に発動する自動補正（スナップバック）
     def slider_changed(k, all_keys):
         val = get_val(k)
         sum_others = sum(get_val(key) for key in all_keys if key != k)
@@ -322,7 +315,6 @@ elif st.session_state.step == "survey_page":
         if val > max_allowable:
             st.session_state[k] = max_allowable
 
-    # ボタンが押された時の増減関数
     def adjust_val(k, delta, all_keys):
         val = get_val(k)
         sum_others = sum(get_val(key) for key in all_keys if key != k)
@@ -341,7 +333,6 @@ elif st.session_state.step == "survey_page":
         other_key_text = f"other_text_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
         other_key_val = f"other_val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
         
-        # 戻ってきた時に以前入力した「その他」の文字を復元する処理
         other_label_key = f"other_label_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
         if other_key_text not in st.session_state:
             st.session_state[other_key_text] = st.session_state.answers.get(other_label_key, "")
@@ -363,9 +354,7 @@ elif st.session_state.step == "survey_page":
             <div style='text-align:right; font-weight:bold; color:{bar_color}; font-size:14px; margin-bottom:10px;'>{status_text}</div>
         """, unsafe_allow_html=True)
         
-        # スライダーの描画（0〜100の整数）
         def draw_adjustable_slider(label, key, all_keys):
-            # 前のページから戻ってきた時のために、answersから過去の値を復元する処理
             if key not in st.session_state:
                 st.session_state[key] = st.session_state.answers.get(key, 0)
                 
@@ -409,7 +398,6 @@ elif st.session_state.step == "survey_page":
     col1, col2 = st.columns([1, 1])
     with col1:
         if st.button("前のテーマへ戻る", type="secondary"):
-            # 【追加】戻るボタンを押した時も、現在入力されている値を安全に保存してから戻る
             for k in st.session_state:
                 if k.startswith("val_") or k.startswith("other_val_") or k.startswith("other_label_"): 
                     st.session_state.answers[k] = st.session_state[k]
@@ -426,7 +414,6 @@ elif st.session_state.step == "survey_page":
             st.warning("⚠️ すべての設問の合計を 100 にしてください")
             
         if st.button(button_label, type="primary", disabled=not all_valid):
-            # 進む時に入力されている値を保存
             for k in st.session_state:
                 if k.startswith("val_") or k.startswith("other_val_") or k.startswith("other_label_"): 
                     st.session_state.answers[k] = st.session_state[k]
