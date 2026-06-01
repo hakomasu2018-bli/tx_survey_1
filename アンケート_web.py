@@ -32,6 +32,22 @@ def load_master():
 
 df_master = load_master()
 
+# --- ページ移動時の状態保存関数（これが消えるのを防ぎます） ---
+def save_current_state():
+    for k in st.session_state:
+        if k.startswith("val_") or k.startswith("other_val_") or k.startswith("other_label_") or k.startswith("pass_"):
+            st.session_state.answers[k] = st.session_state[k]
+
+# --- パスした問題があるかチェックする関数 ---
+def check_any_passed(sh):
+    for k, v in st.session_state.answers.items():
+        if k.startswith(f"pass_{sh}_") and v == True:
+            return True
+    for k, v in st.session_state.items():
+        if k.startswith(f"pass_{sh}_") and v == True:
+            return True
+    return False
+
 # --- 進捗バー ---
 def display_progress():
     if st.session_state.step == "consent": progress = 0.05
@@ -50,15 +66,27 @@ def next_step(target_step):
     st.session_state.step = target_step
     st.rerun()
 
-# --- パスした問題があるかチェックする関数 ---
-def check_any_passed(sh):
-    tps = df_master[df_master['stakeholder_id'] == sh]['touchpoint_text'].unique()
-    for tp_idx, tp in enumerate(tps):
-        q_df = df_master[(df_master['stakeholder_id'] == sh) & (df_master['touchpoint_text'] == tp)]
-        for q_id in q_df['question_text'].unique():
-            if st.session_state.get(f"pass_{sh}_tp{tp_idx}_q{q_id}", False):
-                return True
-    return False
+# ==========================================
+# サイドバー（パス一覧の常時表示）
+# ==========================================
+if st.session_state.step in ["survey_page", "pass_review", "final_submit"]:
+    with st.sidebar:
+        st.markdown("### ⏭️ パスした設問一覧")
+        sh = st.session_state.answers.get('stakeholder')
+        if sh:
+            has_pass = False
+            # パス状態のものを抽出して表示
+            for k, v in st.session_state.answers.items():
+                if k.startswith(f"pass_{sh}_") and v == True:
+                    has_pass = True
+                    # キーから設問を特定して表示
+                    parts = k.split("_tp")[1].split("_q")
+                    tp_idx = int(parts[0])
+                    q_id = parts[1]
+                    st.markdown(f"・**Q{tp_idx+1}**: {q_id}")
+                    
+            if not has_pass:
+                st.info("現在パスしている設問はありません。")
 
 # ==========================================
 # 画面描画ロジック
@@ -270,20 +298,15 @@ elif st.session_state.step == "instructions":
     
     st.header(title_text)
     st.write("以下では、様々な場面について、あなたにとっての理想をお答えいただきます。設問は35題あり、所要時間は20分～30分程度です。")
-    
-    if sh in ["nurse", "manager"]:
-        intuitive_text = "<span style='color: #d32f2f; font-weight: bold; font-size: 1.1em;'>直感的に配分してください。</span>"
-    else:
-        intuitive_text = "<strong>直感的に配分してください。</strong>"
 
     st.markdown(f"""
     <div style='background-color: #f0f2f6; padding: 20px; border-radius: 5px; margin-bottom: 20px;'>
         <p>❖ 各設問において、<strong>選択肢の重要度の合計が「100」になるように</strong>スライダーや「＋」「－」ボタンを使って配分してください。</p>
-        <p>❖ 最も重視する項目に高い数値を、重視しない項目には 0 に近い数値を割り当てます。バーの長さを目安に{intuitive_text}</p>
+        <p>❖ 最も重視する項目に高い数値を、重視しない項目には 0 に近い数値を割り当てます。バーの長さを目安に直感的に配分してください。</p>
         <p>❖ 画面上部に合計値のバーが表示されます。<strong>合計がぴったり 100（緑色）にならないと、次の画面に進むことができません。</strong></p>
-        <p>❖ 答えにくい設問には<strong>「この設問をパスする」</strong>にチェックを入れることで、後回しにして先に進むことができます。</p>
         <p>❖ その他、加えたい内容がある場合は、任意でご記入ください。（※「その他」に入力した場合、その項目も合計 100 の配分に含めてください）</p>
-        <p><span style='color: #d32f2f; font-weight: bold; font-size: 1.1em;'>❖ 実際の現場では患者の状態や病棟の状況によって対応が異なると思いますが、本調査では細かな条件を厳密に想定しすぎず、直感的に配分してください。</span></p>
+        <p>❖ 答えにくい設問には<strong>「この設問をパスする」</strong>にチェックを入れることで、後回しにして先に進むことができます。</p>
+        <p><span style='color: #d32f2f; font-weight: bold; font-size: 1.1em;'>❖ 実際の現場では患者の状態や病棟の状況によって対応が異なると思いますが、本調査では細かな条件を厳密に想定しすぎず、直感的にお答えください。</span></p>
         <p>❖ 正解はありませんので、一般的に望ましいと思われる回答ではなく、ご自身の率直なお考えをご回答ください。ご回答の内容が他の職員の方などに見られることはありません。</p>
     </div>
     """, unsafe_allow_html=True)
@@ -305,13 +328,18 @@ elif st.session_state.step == "instructions":
             next_step("survey_page")
 
 # =========================================================
-# 4. アンケート本編（パス機能対応）
+# 4. アンケート本編（パス機能・UI改善版）
 # =========================================================
 elif st.session_state.step == "survey_page":
+    # --- CSS: パスのチェックボックスを大きく、目立たせる ---
     st.markdown("""
         <style>
             div[data-testid="stTickBar"] { display: none !important; }
             div[data-testid="column"] button { width: 100% !important; padding: 5px !important; }
+            
+            /* チェックボックスの文字と四角を大きく */
+            div[data-testid="stCheckbox"] label span { font-size: 1.1rem !important; font-weight: bold !important; color: #d32f2f !important; }
+            div[data-testid="stCheckbox"] div[role="checkbox"] { transform: scale(1.4) !important; margin-right: 10px !important; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -319,7 +347,6 @@ elif st.session_state.step == "survey_page":
     tps = df_master[df_master['stakeholder_id'] == sh]['touchpoint_text'].unique()
     current_tp = tps[st.session_state.current_tp_idx]
     
-    # レビューモード中なら表示を少し変える
     if st.session_state.review_mode:
         st.warning("🔄 パスした設問の回答画面です。終わりましたら一番下の「パス一覧に戻る」を押してください。")
         
@@ -353,15 +380,17 @@ elif st.session_state.step == "survey_page":
     for q_id in q_df['question_text'].unique():
         options = q_df[q_df['question_text'] == q_id]
         
-        # ★ パスチェックボックスの配置
+        # パス状態の取得
         pass_key = f"pass_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
-        is_passed = st.checkbox("⏭️ この設問をパスする（後で回答するか、そのままスキップできます）", key=pass_key)
+        if pass_key not in st.session_state:
+            st.session_state[pass_key] = st.session_state.answers.get(pass_key, False)
+        is_passed = st.session_state[pass_key]
         
         slider_keys = [f"val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}_opt{row['option_id']}_item{row['item_id']}" for _, row in options.iterrows()]
         other_key_text = f"other_text_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
         other_key_val = f"other_val_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
-        
         other_label_key = f"other_label_{sh}_tp{st.session_state.current_tp_idx}_q{q_id}"
+        
         if other_key_text not in st.session_state:
             st.session_state[other_key_text] = st.session_state.answers.get(other_label_key, "")
             
@@ -370,10 +399,10 @@ elif st.session_state.step == "survey_page":
         
         current_sum = sum(get_val(k) for k in slider_keys)
         
-        # パスされている場合はゲージの色をグレーにし、バリデーションを通過させる
+        # ゲージの描画（パスされている場合はグレー）
         if is_passed:
             bar_color = "#9E9E9E"
-            status_text = "⏭️ パスされています（合計 100 にしなくても進めます）"
+            status_text = "⏭️ パスされています（合計100にしなくても次へ進めます）"
         else:
             bar_color = "#4CAF50" if current_sum == 100 else ("#F44336" if current_sum > 100 else "#FFC107")
             status_text = f"✅ 合計: 100" if current_sum == 100 else (f"⚠️ 合計: {current_sum} (超過)" if current_sum > 100 else f"⏳ 合計: {current_sum} (不足)")
@@ -427,16 +456,17 @@ elif st.session_state.step == "survey_page":
             if other_label_key in st.session_state.answers:
                 st.session_state.answers[other_label_key] = ""
                 
+        # ★ 選択肢の「一番下」にパスのチェックボックスを配置
+        st.write("")
+        st.checkbox("⏭️ この設問をパスする（後で回答するか、そのままスキップできます）", key=pass_key)
+                
         st.markdown("---")
         
     col1, col2 = st.columns([1, 1])
     with col1:
         if not st.session_state.review_mode:
             if st.button("前のテーマへ戻る", type="secondary"):
-                for k in st.session_state:
-                    if k.startswith("val_") or k.startswith("other_val_") or k.startswith("other_label_"): 
-                        st.session_state.answers[k] = st.session_state[k]
-                        
+                save_current_state()
                 if st.session_state.current_tp_idx > 0:
                     st.session_state.current_tp_idx -= 1
                     st.rerun()
@@ -448,9 +478,7 @@ elif st.session_state.step == "survey_page":
             if not all_valid:
                 st.warning("⚠️ パスしない設問の合計を 100 にしてください")
             if st.button("パス一覧に戻る", type="primary", disabled=not all_valid):
-                for k in st.session_state:
-                    if k.startswith("val_") or k.startswith("other_val_") or k.startswith("other_label_"): 
-                        st.session_state.answers[k] = st.session_state[k]
+                save_current_state()
                 st.session_state.review_mode = False
                 next_step("pass_review")
         else:
@@ -460,13 +488,9 @@ elif st.session_state.step == "survey_page":
                 st.warning("⚠️ すべての設問の合計を 100 にするか、「パス」にチェックを入れてください")
                 
             if st.button(button_label, type="primary", disabled=not all_valid):
-                for k in st.session_state:
-                    if k.startswith("val_") or k.startswith("other_val_") or k.startswith("other_label_"): 
-                        st.session_state.answers[k] = st.session_state[k]
-                        
+                save_current_state()
                 st.session_state.current_tp_idx += 1
                 if st.session_state.current_tp_idx >= len(tps):
-                    # 全て終わった時、一つでもパスがあればパス一覧画面へ
                     if check_any_passed(sh):
                         next_step("pass_review")
                     else:
@@ -491,9 +515,9 @@ elif st.session_state.step == "pass_review":
         for q_id in q_df['question_text'].unique():
             pass_key = f"pass_{sh}_tp{tp_idx}_q{q_id}"
             
-            if st.session_state.get(pass_key, False):
+            if st.session_state.answers.get(pass_key, False):
                 passed_count += 1
-                st.markdown(f"**【テーマ】 {tp}**")
+                st.markdown(f"**【Q{tp_idx+1}. {tp}】**")
                 st.write(f"設問： {q_id}")
                 
                 if st.button("この設問に回答する", key=f"btn_rev_{tp_idx}_{q_id}"):
@@ -522,8 +546,6 @@ elif st.session_state.step == "final_submit":
     with col1:
         if st.button("アンケートへ戻る", type="secondary"):
             sh = st.session_state.answers['stakeholder']
-            
-            # パスした設問があればパス一覧に、なければ最後のページに戻る
             if check_any_passed(sh):
                 next_step("pass_review")
             else:
@@ -567,6 +589,9 @@ elif st.session_state.step == "final_submit":
                                 labels.append(f"【{tp}】 {q_id}：{row['option_text']}")
                             keys.append(f"other_label_{sh_val}_tp{tp_idx}_q{q_id}"); labels.append(f"【{tp}】 {q_id}：その他（自由記述）")
                             keys.append(f"other_val_{sh_val}_tp{tp_idx}_q{q_id}"); labels.append(f"【{tp}】 {q_id}：その他（評価値）")
+                            
+                            # 分析用に追加：その問題がパスされたかどうか
+                            keys.append(f"pass_{sh_val}_tp{tp_idx}_q{q_id}"); labels.append(f"【{tp}】 {q_id}：パスされたか")
                     return keys, labels
                 
                 keys, readable_labels = get_fixed_headers_and_labels(sh, df_master)
